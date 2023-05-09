@@ -1,0 +1,56 @@
+# binary / unary 
+
+3 + 4
+
+3 +
+4
+
+3
++ 4
+
+==>
+
+Script(
+    BinaryExpr(Numeric,ArithOp("+"),Numeric)
+    BinaryExpr(Numeric,ArithOp("+"),Numeric)
+    Numeric
+    UnaryExpr(ArithOp("+"),Numeric)
+)
+
+# if
+
+if
+(
+TRUE
+)
+5
+
+if
+(
+TRUE
+)
+5 else
+6
+
+==>
+
+Script(
+    ControlExpr("if",Logical,Numeric)
+    ControlExpr("if",Logical,Numeric,"else",Numeric)
+)
+
+#if with return before else
+
+if
+(
+TRUE
+)
+5
+else
+6
+
+==>
+
+Script(
+    ControlExpr("if",Logical,Numeric,"else",Numeric)
+)

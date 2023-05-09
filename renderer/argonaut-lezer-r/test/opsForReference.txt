@@ -1,0 +1,384 @@
+# logical 
+
+TRUE
+
+==>
+
+Script(Logical)
+
+# numeric
+
+1
+
+==>
+
+Script(Numeric)
+
+# integer
+
+1L
+
+==>
+
+Script(Integer)
+
+# complex
+
+1i
+
+==>
+
+Script(Complex)
+
+# character
+
+"one"
+
+==>
+
+Script(Character) 
+
+# identifier
+
+one
+`one`
+
+==>
+
+Script(Identifier,Identifier)
+
+# unary +
+
++ 1
+
+==>
+
+Script(UnaryExpr(ArithOp("+"),Numeric))
+
+# unary -
+
+- 1
+
+==>
+
+Script(UnaryExpr(ArithOp("-"),Numeric))
+
+# unary !
+
+! 1
+
+==>
+
+Script(UnaryExpr(LogicOp("!"),Numeric))
+
+# unary ~
+
+~ 1
+
+==>
+
+Script(UnaryExpr(GenOp("~"),Numeric))
+
+# unary ?
+
+? 1
+
+==>
+
+Script(UnaryExpr(GenOp("?"),Numeric))
+
+# binary :
+
+1 : 1
+
+==>
+
+Script(BinaryExpr(Numeric,GenOp(":"),Numeric))
+
+# binary *
+
+1 * 1
+
+==>
+
+Script(BinaryExpr(Numeric,ArithOp("*"),Numeric))
+
+# binary /
+1 / 1
+
+==>
+
+Script(BinaryExpr(Numeric,ArithOp("/"),Numeric))
+
+# binary +
+1 + 1
+
+==>
+
+Script(BinaryExpr(Numeric,ArithOp("+"),Numeric))
+
+# binary -
+1 - 1
+
+==>
+
+Script(BinaryExpr(Numeric,ArithOp("-"),Numeric))
+
+# binary ^
+1 ^ 1
+
+==>
+
+Script(BinaryExpr(Numeric,ArithOp("^"),Numeric))
+
+# binary Infix
+
+1 %% 1
+
+==>
+
+Script(BinaryExpr(Numeric,GenOp(INFIX),Numeric))
+
+# binary <
+
+1 < 1
+
+==>
+
+Script(BinaryExpr(Numeric,CompOp("<"),Numeric))
+
+# binary >
+
+1 > 1
+
+==>
+
+Script(BinaryExpr(Numeric,CompOp(">"),Numeric))
+
+# binary >=
+
+1 >= 1
+
+==>
+
+Script(BinaryExpr(Numeric,CompOp(">="),Numeric))
+
+# binary <=
+
+1 <= 1
+
+==>
+
+Script(BinaryExpr(Numeric,CompOp("<="),Numeric))
+
+# binary ==
+
+1 == 1
+
+==>
+
+Script(BinaryExpr(Numeric,CompOp("=="),Numeric))
+
+# binary !=
+
+1 != 1
+
+==>
+
+Script(BinaryExpr(Numeric,CompOp("!="),Numeric))
+
+# binary &
+
+1 & 1
+
+==>
+
+Script(BinaryExpr(Numeric,LogicOp("&"),Numeric))
+
+# binary |
+
+1 | 1
+
+==>
+
+Script(BinaryExpr(Numeric,LogicOp("|"),Numeric))
+
+# binary &&
+
+1 && 1
+
+==>
+
+Script(BinaryExpr(Numeric,LogicOp("&&"),Numeric))
+
+# binary ||
+
+1 || 1
+
+==>
+
+Script(BinaryExpr(Numeric,LogicOp("||"),Numeric))
+
+# binary <-
+
+x <- 1
+
+==>
+
+Script(BinaryExpr(Identifier,AssignOp("<-"),Numeric))
+
+# binary <<-
+
+x <<- 1
+
+==>
+
+Script(BinaryExpr(Identifier,AssignOp("<<-"),Numeric))
+
+# binary ->
+
+# Note that the R parser automatically converts this to <-
+# so this can't be tested with the R generated results 
+1 -> x
+
+==>
+
+Script(
+    Comment
+    Comment
+    BinaryExpr(Numeric,AssignOp("->"),Identifier)
+)
+
+# binary ->>
+
+# Note that the R parser automatically converts this to <<-
+# so this can't be tested with the R generated results 
+1 ->> x
+
+==>
+
+Script(
+    Comment
+    Comment
+    BinaryExpr(Numeric,AssignOp("->>"),Identifier)
+)
+
+# binary =
+
+x = 1
+
+==>
+
+Script(BinaryExpr(Identifier,AssignOp("="),Numeric))
+
+# if
+
+if(TRUE) 1
+if(TRUE) 1 else 1
+
+==>
+
+Script(
+    ControlExpr("if",Logical,Numeric)
+    ControlExpr("if",Logical,Numeric,"else",Numeric)
+)
+
+# repeat
+
+repeat 1
+
+==>
+
+Script(
+    ControlExpr("repeat",Numeric)
+)
+
+# while
+
+while(TRUE) 1
+
+==>
+
+Script(
+    ControlExpr("while",Logical,Numeric)
+)
+
+# for
+
+for(one in 1) 1
+
+==>
+
+Script(
+    ControlExpr("for",Identifier,"in",Numeric,Numeric)
+)
+
+# function call
+
+foo()
+foo(x,y,a=6,,7)
+
+==>
+
+Script(
+    StdCall(Identifier,ArgList(EmptyArg))
+    StdCall(Identifier,ArgList(ArgValue(Identifier),ArgValue(Identifier),ArgValue(Identifier,"=",Numeric),EmptyArg,ArgValue(Numeric)))
+)
+
+# single bracket index
+
+foo[]
+foo[x,y,a=6,,7]
+
+==>
+
+Script(
+    IndexExpr(Identifier,"[",ArgList(EmptyArg),"]")
+    IndexExpr(Identifier,"[",ArgList(ArgValue(Identifier),ArgValue(Identifier),ArgValue(Identifier,"=",Numeric),EmptyArg,ArgValue(Numeric)),"]")
+)
+
+# double bracket index
+
+foo[[]]
+foo[[x,y,a=6,,7]]
+
+==>
+
+Script(
+    IndexExpr(Identifier,"[[",ArgList(EmptyArg),"]]")
+    IndexExpr(Identifier,"[[",ArgList(ArgValue(Identifier),ArgValue(Identifier),ArgValue(Identifier,"=",Numeric),EmptyArg,ArgValue(Numeric)),"]]")
+)
+
+# function definition
+
+function(a,b,c=1,d) 1
+
+==>
+
+Script(
+    FuncDef("function",ParamList(ParamValue(Identifier),ParamValue(Identifier),ParamValue(Identifier,"=",Numeric),ParamValue(Identifier)),Numeric)
+)
+
+# block
+
+{
+    1 + 2
+    3 * 4
+}
+
+==>
+
+Script(
+    Block(
+        BinaryExpr(Numeric,ArithOp("+"),Numeric)
+        BinaryExpr(Numeric,ArithOp("*"),Numeric)
+    )
+)
+
+# Comment
+
+# This is a Comment
+ 
+==>
+
+Script(Comment)

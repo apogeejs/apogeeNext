@@ -1,0 +1,250 @@
+<html>
+	<head>
+<style>
+
+.varTable {
+  border-collapse: collapse;
+  font-family: monospace;
+  font-size: 14px;
+  margin-top: 5px;
+  font-family: monospace;
+}
+
+.varName {
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 5px;
+  font-family: monospace;
+}
+
+.varType {
+  font-family: monospace;
+  font-size: 14px;
+  margin-bottom: 5px;
+  margin-left: 5px;
+}
+
+.tableNameCell {
+  padding: 1px;
+  text-align: center;
+  color: #888888;
+  background-color: #f2f2f2;
+}
+
+.verticalText {
+  writing-mode: vertical-rl; /* vertical writing mode, right-to-left */
+  text-orientation: upright; /* upright orientation of the text */
+}
+
+
+.tableIndexCell {
+  padding: 1px;
+  text-align: center;
+  color: #888888;
+  font-style: italic;
+  background-color: #f2f2f2;
+}
+
+.tableCornerCell {
+  padding: 3px;
+}
+
+.tableValueCell {
+  padding: 5px;
+  text-align: center;
+  color: #000000;
+  background-color: #f7f7f7;
+}
+
+.listLabel {
+  font-size: 14px;
+  margin-bottom: 5px;
+  color: #555555;
+  font-family: monospace;
+}
+
+.notFirst {
+  margin-left: 5px;
+}
+
+.listBody {
+  font-size: 14px;
+  margin-bottom: 5px;
+  color: #000000;
+  font-family: monospace;
+  margin-left: 5px;
+}
+
+</style>
+	</head>
+	<body>
+	
+<!-- HTML code for the hover popup -->
+<div class="popup">
+	<span class="varName">myMatrix</span> <span class="varType">numeric[3,5]</span>
+  <table class="varTable">
+    <tr>
+      <td class="tableCornerCell" colspan="2"></td>
+      <td class="tableNameCell" colspan="6">cols</td>
+    </tr>
+    <tr>
+      <td class="tableCornerCell" colspan="2"></td>
+      <td class="tableNameCell">one</td>
+      <td class="tableNameCell">two</td>
+      <td class="tableNameCell">three</td>
+      <td class="tableNameCell">four</td>
+      <td class="tableNameCell">five</td>
+      <td class="tableNameCell">...</td>
+    </tr>
+    <tr>
+      <td class="tableNameCell verticalText" rowspan="4">rows</td>
+      <td class="tableNameCell">one</td>
+      <td class="tableValueCell">0.8471</td>
+      <td class="tableValueCell">0.6231</td>
+      <td class="tableValueCell">0.0355</td>
+      <td class="tableValueCell">0.5298</td>
+      <td class="tableValueCell">0.7146</td>
+      <td class="tableValueCell">...</td>
+    </tr>
+    <tr>
+      <td class="tableNameCell">two</td>
+      <td class="tableValueCell">0.2522</td>
+      <td class="tableValueCell">0.8733</td>
+      <td class="tableValueCell">0.8739</td>
+      <td class="tableValueCell">0.9967</td>
+      <td class="tableValueCell">0.4385</td>
+    </tr>
+    <tr>
+      <td class="tableNameCell">three</td>
+      <td class="tableValueCell">0.5764</td>
+      <td class="tableValueCell">0.2691</td>
+      <td class="tableValueCell">0.2766</td>
+      <td class="tableValueCell">0.1981</td>
+      <td class="tableValueCell">0.1429</td>
+    </tr>
+    <tr>
+      <td class="tableNameCell">...</td>
+      <td class="tableValueCell">...</td>
+    </tr>
+  </table>
+</div>
+
+<br>
+<br>
+<br>
+
+<div class="popup">
+	<span class="varName">myMatrix</span> <span class="varType">numeric[3,5]</span>
+  <table class="varTable">
+    <tr>
+      <td class="tableCornerCell"></td>
+      <td class="tableIndexCell">1</td>
+      <td class="tableIndexCell">2</td>
+      <td class="tableIndexCell">3</td>
+      <td class="tableIndexCell">4</td>
+      <td class="tableIndexCell">5</td>
+      <td class="tableIndexCell">...</td>
+    </tr>
+    <tr>
+      <td class="tableIndexCell">1</td>
+      <td class="tableValueCell">0.8471</td>
+      <td class="tableValueCell">0.6231</td>
+      <td class="tableValueCell">0.0355</td>
+      <td class="tableValueCell">0.5298</td>
+      <td class="tableValueCell">0.7146</td>
+      <td class="tableValueCell">...</td>
+    </tr>
+    <tr>
+      <td class="tableIndexCell">2</td>
+      <td class="tableValueCell">0.2522</td>
+      <td class="tableValueCell">0.8733</td>
+      <td class="tableValueCell">0.8739</td>
+      <td class="tableValueCell">0.9967</td>
+      <td class="tableValueCell">0.4385</td>
+    </tr>
+    <tr>
+      <td class="tableIndexCell">3</td>
+      <td class="tableValueCell">0.5764</td>
+      <td class="tableValueCell">0.2691</td>
+      <td class="tableValueCell">0.2766</td>
+      <td class="tableValueCell">0.1981</td>
+      <td class="tableValueCell">0.1429</td>
+    </tr>
+    <tr>
+      <td class="tableIndexCell">...</td>
+      <td class="tableValueCell">...</td>
+    </tr>
+  </table>
+</div>
+
+<br>
+<br>
+<br>
+
+<div class="popup">
+	<span class="varName">myVector</span> <span class="varType">numeric[50]</span>
+  <table class="varTable">
+    <tr>
+      <td class="tableNameCell">one</td>
+      <td class="tableNameCell">two</td>
+      <td class="tableNameCell">three</td>
+      <td class="tableNameCell">four</td>
+      <td class="tableNameCell">five</td>
+      <td class="tableNameCell">...</td>
+    </tr>
+    <tr>
+      <td class="tableValueCell">0.8471</td>
+      <td class="tableValueCell">0.6231</td>
+      <td class="tableValueCell">0.0355</td>
+      <td class="tableValueCell">0.5298</td>
+      <td class="tableValueCell">0.7146</td>
+      <td class="tableValueCell">...</td>
+    </tr>
+  </table>
+</div>
+
+
+<br>
+<br>
+<br>
+
+
+<div class="popup">
+	<span class="varName">myFactor</span> <span class="varType">ordered[50]</span>
+  <table class="varTable">
+    <tr>
+      <td class="tableIndexCell">1</td>
+      <td class="tableIndexCell">2</td>
+      <td class="tableIndexCell">3</td>
+      <td class="tableIndexCell">4</td>
+      <td class="tableIndexCell">5</td>
+      <td class="tableIndexCell">...</td>
+    </tr>
+    <tr>
+      <td class="tableValueCell">one</td>
+      <td class="tableValueCell">two</td>
+      <td class="tableValueCell">three</td>
+      <td class="tableValueCell">four</td>
+      <td class="tableValueCell">five</td>
+      <td class="tableValueCell">...</td>
+    </tr>
+  </table>
+  <span class="listLabel">Levels: </span> <span class="listBody">one two three four five...</span>
+</div>
+
+<h1>One liners</h1>
+
+<span class="varName">myVector</span> <span class="varType">character[50]</span> <span class="listLabel notfirst">Values: </span> <span class="listBody">"one" "two" "three" "four" "five" ...</span>
+
+
+<br>
+<br>
+<br>
+
+
+<span class="varName">myList</span> <span class="varType">list[50]</span> <span class="listLabel notfirst">Names: </span> <span class="listBody">one two three four five...</span>
+
+
+
+	</body>
+</html>

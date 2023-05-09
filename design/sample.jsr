@@ -1,0 +1,23 @@
+import { a, b, c} from "./d"
+import u from "./u" 
+
+//not shown - default export too, I guess
+
+// this is a code data field, which is exported
+export xxx := {
+  return 3
+}
+
+// this is a function field, which is exported
+export foo := (a,b) {
+  return a
+}
+
+// This is a transient field
+yyy :~ 45
+
+// This is a code field, but it is a one-liner
+zzz := xxx + 3
+
+// This is a one liner function (?)
+foo2 := (a,b) => a + b

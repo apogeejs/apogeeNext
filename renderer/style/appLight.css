@@ -1,0 +1,128 @@
+/***************** app  ****************/
+html {
+    overflow:hidden;
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    bottom:0;
+}
+body {
+    overflow:hidden;
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    bottom:0;
+    padding:0px;
+    margin:0px;
+    font-family: sans-serif;
+    font-size: 14px;
+}
+.appContainer {
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    bottom:0;
+    display:flex;
+    flex-direction:column;
+}
+.app-editor-container {
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    bottom:0;
+    overflow: hidden;
+}
+
+/***************** Menu Bar  ****************/
+.menu_bar {
+    color: rgb(0, 0, 0);
+    background-color: rgb(255, 255, 255);
+}
+
+/***************** SelectMenu  ****************/
+.selectMenu_wrapper {
+    display: inline;
+    position: relative;
+}
+.selectMenu_label {
+    display: inline;
+    position: relative;
+
+    /* need to set style here and for the menu bar */
+    /*Also, remember we will use this for other inline menus */
+    color: darkblue;
+    font-weight: bold;
+    padding: 5px;
+    line-height: 2.0; /* I had trouble with padding and spacing - this was to help. needs work. */
+}
+.selectMenu_select {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+
+    /* This is supposed to hide the element. Need to test it on different platforms */
+    background-color: rgba(0,0,0,0);
+    color: rgba(0,0,0,0);
+    appearance: none;
+    border: none; /* we still get a border for when it has focus. That is ok, but I don't like the look of it too much. */
+
+}
+.selectMenu_option { /* might want to make this specific to select menu */
+    opacity: 1;
+    color: black;
+    background-color: white;
+}
+.selectMenu_select:hover {
+    background-color: rgba(0,0,0,.1);  /* This covers the label text! Just make it with low opacity. */
+}
+.selectMenu_select:active {
+    background-color: rgba(0,0,0,.1);
+}
+.selectMenu_select:focus-visible {
+    /* this modifies the appearance when it has focus */
+    border: none;
+    outline: 1px solid gray;
+}
+
+/***************** tabview  ****************/
+
+.tabView {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: rgb(234,234,246);
+    overflow: hidden;
+}
+.tabView_head {
+    flex-grow: 0;
+}
+.tabView_body {
+    position: relative;
+    flex-grow: 1;
+    overflow: hidden;
+}
+.tabView_tab {
+    display: inline-block;
+    padding: 5px;
+    color: black;
+}
+.tabView_deselected {
+    background-color: rgb(234,234,246);
+}
+.tabView_selected {
+    background-color: white;
+}
+.tabView_frame {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+    background-color: white;
+
+}

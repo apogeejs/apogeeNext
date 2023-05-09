@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title></title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <script type="module">
+            //import ElectronNodeFileAccess from "../dist/ElectronNodeFileAccess.js"
+            //new ElectronNodeFileAccess()
+        </script>
+
+        <script type="text/javacript">
+            function getIsDirty() {
+                return false
+            }
+        </script>
+        <script>
+
+            let eventIndex = 0
+            let firstPass = true
+            let continueEvents = true
+
+            let DUMMY_CMD = {scope: 'rpc', method: 'console_input', params: ["111","",0]}
+
+            const MESSAGE_START1 = '[1] "|$($|'
+            const MESSAGE_START2 = ' "|$($|'
+            const MESSAGE_END = '|$)$|"'
+            const MESSAGE_PREFIX1 = '[1] '
+            const MESSAGE_PREFIX2 = ' '
+            const MESSAGE_HEADER = '|$($|'
+            const MESSAGE_FOOTER = '|$)$|'
+            
+            //-----------------------------
+            // main functions
+            //-----------------------------
+            function run() {
+                console.log("In run!")
+                
+                if(firstPass) {
+                    //send a dummy command
+                    sendCommand(DUMMY_CMD)
+                }
+
+                //start event listener
+                listenForEvents()
+            }
+
+            function onInitComplete() {
+                console.log("Starting commands")
+                try {
+                    startAppCode()
+                }
+                catch(e) {
+                    console.log("Error starting commands: " + e.toString())
+                }
+            }
+
+            //-----------------------------
+            // application functions
+            //-----------------------------
+            
+            //initialize commands
+            let commandIndex = 0
+            let commands = []
+            
+            let BASIC_TEST_SEQUENCE = [
+                {scope: 'rpc', method: 'console_input', params: ["n <- 100","",0]},
+                {scope: 'rpc', method: 'console_input', params: ["x <- rnorm(n)","",0]},
+                {scope: 'rpc', method: 'console_input', params: ["x","",0]},
+                {scope: 'rpc', method: 'console_input', params: ["plot(1:n,x)","",0]},
+                {scope: 'rpc', method: 'execute_code', params: ["print(n)"]},
+                {scope: 'rpc', method: 'execute_code', params: ["y <- c(\"sadfasd\",\"hgfhgf\",\"dtrdtrd\")"]},
+                {scope: 'rpc', method: 'execute_r_code', params: ["y <- 342342"]},
+                {scope: 'rpc', method: 'execute_code', params: ["y <- y + 342343"]},
+                {scope: 'rpc', method: 'get_object_contents', params: ["y"]},
+                {scope: 'rpc', method: 'console_input', params: ["y"]},
+                {scope: 'rpc', method: 'execute_r_code', params: ["paste(\"[\",paste(c(\"asdf\",\"nnnn\",\"ffff\"),collapse=\",\"),\"]\",sep=\"\")"]},
+                {scope: 'rpc', method: 'execute_code', params: ["n; plot(1:n,x);print(\"hello\");45"]},
+                {scope: 'rpc', method: 'execute_code', params: ["n; plot(1:n,x);print(\"hello\");45"]},
+                {scope: 'rpc', method: 'console_input', params: ["n; plot(1:n,x);print(\"hello\");45","sdfs",0]}
+            ]
+
+            let BASIC_REPDOC_SEQUENCE = [
+                {scope: 'rpc', method: 'execute_code', params: ['require(repdoc)']},
+                {scope: 'rpc', method: 'execute_code', params: ['initializeSession()']},
+                {scope: 'rpc', method: 'execute_code', params: ['initializeDocState("ds1")']},
+                {scope: 'rpc', method: 'execute_code', params: ['addCmd("ds1","l1","set.seed(123)",0)']},
+                {scope: 'rpc', method: 'execute_code', params: ['addCmd("ds1","l2","n <- 100",1)']},
+                {scope: 'rpc', method: 'execute_code', params: ['addCmd("ds1","l3","x <- rnorm(n)",2)']},
+                {scope: 'rpc', method: 'execute_code', params: ['addCmd("ds1","l4","x",3)']},
+                {scope: 'rpc', method: 'execute_code', params: ['addCmd("ds1","l5","hist(x)",4)']},
+                {scope: 'rpc', method: 'execute_code', params: ['updateCmd("ds1","l2","n <- 10")']},
+                {scope: 'rpc', method: 'execute_code', params: ['evaluate("ds1")']},
+                {scope: 'rpc', method: 'execute_code', params: ['evaluate("ds1")']},
+                {scope: 'rpc', method: 'execute_code', params: ['evaluate("ds1")']},
+                {scope: 'rpc', method: 'execute_code', params: ['evaluate("ds1")']},
+                {scope: 'rpc', method: 'execute_code', params: ['deleteCmd("ds1","l1")']},
+                {scope: 'rpc', method: 'execute_code', params: ['evaluate("ds1")']},
+                {scope: 'rpc', method: 'execute_code', params: ['evaluate("ds1")']},
+                {scope: 'rpc', method: 'execute_code', params: ['evaluate("ds1")']},
+                {scope: 'rpc', method: 'execute_code', params: ['evaluate("ds1")']},
+                // this was to test a long running plot
+                //{scope: 'rpc', method: 'execute_code', params: ['plot(rnorm(100000),rnorm(100000),t=\"l\")'],nPostDelta: true},
+                //{scope: 'rpc', method: 'execute_code', params: ['print("ssdf")']},
+                
+                //testing adding to a plot
+                //{scope: 'rpc', method: 'execute_r_code', params: ['plot(1:5,rnorm(5))']},
+                //{scope: 'rpc', method: 'execute_r_code', params: ['points(1:5,rnorm(5),col="blue")']},
+
+                //testing stop and message
+                //{scope: 'rpc', method: 'console_input', params: ['addCmd("ds1","l6","message(\\"This is an error message\\")",4)','',0]},
+                //{scope: 'rpc', method: 'console_input', params: ['addCmd("ds1","l7","stop(\\"This is in a stop\\")",5)','',0]},
+                //{scope: 'rpc', method: 'execute_r_code', params: ['addCmd("ds1","l8","message(\\"This is an error message\\")",6)']},
+                //{scope: 'rpc', method: 'execute_r_code', params: ['addCmd("ds1","l9","stop(\\"This is in a stop\\")",7)']},
+                //{scope: 'rpc', method: 'execute_code', params: ['addCmd("ds1","l10","message(\\"This is an error message\\")",8)']},
+                //{scope: 'rpc', method: 'execute_code', params: ['addCmd("ds1","l11","stop(\\"This is in a stop\\")",9)']},
+            ]
+
+            function startAppCode() {
+                commands = BASIC_REPDOC_SEQUENCE
+                //commands = CHUNK_TEST_SEQUENCE
+                simpleCommandSequence()
+            }
+
+            function simpleCommandSequence() {
+                if(commandIndex < commands.length) {
+                    console.log("###############################")
+                    console.log("SENDING COMMAND: " + JSON.stringify(commands[commandIndex]))
+                    console.log("###############################")
+                    let cmd = commands[commandIndex]
+                    sendCommand(cmd)
+                    commandIndex++
+                    let delay = cmd.noPostDelay ? 0 : 1000
+                    setTimeout(simpleCommandSequence,delay)
+                }
+            }
+
+            /////////////////////////////////////////////
+            // THis is to test chunks
+
+            CHUNK_TEST_SEQUENCE = [
+                {scope: 'rpc', method: 'new_document', params: ['r_markdown','',{}],processResponse: processNewDoc },
+            ]
+
+            function processNewDoc(response) {
+                let docId = response.data.result.id
+                setChunkCmds(docId)
+            }
+
+
+            function setChunkCmds(docId) {
+                let params
+                
+                //name
+                params = [
+                    docId,
+                    {
+                        "tempName": "Untitled1"
+                    }
+                ]
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'modify_document_properties', getParams: params})
+
+                //dependenciees
+                params = [
+                    docId,
+                    ".Rmd"
+                ]
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'discover_package_dependencies', getParams: params})
+
+                //this is to add a delay
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'execute_code', params: ['print("dummy")']})
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'execute_code', params: ['print("dummy")']})
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'execute_code', params: ['print("dummy")']})
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'execute_code', params: ['print("dummy")']})
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'execute_code', params: ['print("dummy")']})
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'execute_code', params: ['print("dummy")']})
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'execute_code', params: ['print("dummy")']})
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'execute_code', params: ['print("dummy")']})
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'execute_code', params: ['print("dummy")']})
+
+                // {
+                //     "method": "modify_document_properties",
+                //     "params": [
+                //         "E95FE6D0",
+                //         {
+                //             "last_setup_crc32": "171ce8dbbb338d19"
+                //         }
+                //     ],
+                //     "clientId": "33e600bb-c1b1-46bf-b562-ab5cba070b0e",
+                //     "clientVersion": ""
+                // }
+
+                //run a cmd chunk
+                params = [
+                    {
+                        "doc_id": docId,
+                        "job_desc": "Run Chunk",
+                        "working_dir": "",
+                        "commit_mode": 0,
+                        "pixel_width": 551,
+                        "char_width": 65,
+                        "units": [
+                            {
+                                "doc_id": "E95FE6D0",
+                                "chunk_id": "cso94w9tow2ke",
+                                "exec_mode": 0,
+                                "exec_scope": 0,
+                                "code": "```{r pressure, echo=FALSE}\nplot(pressure)\n```",
+                                "pending": [
+                                    {
+                                        "start": 28,
+                                        "stop": 42
+                                    }
+                                ],
+                                "completed": [],
+                                "executing": null
+                            }
+                        ],
+                        "max_units": 1,
+                        "completed_units": []
+                    }
+                ]
+
+                CHUNK_TEST_SEQUENCE.push({scope: 'rpc', method: 'execute_notebook_chunks', params: params})
+            }
+
+
+            /////////////////////////////////////////////
+
+            //------------------------------
+            // commands
+            //------------------------------
+
+            function listenForEvents() {
+                try {
+                    getEvents();
+                }
+                catch(err) {
+                    console.log("Error in event listener loop!")
+                    console.log(err.toString())
+                    //issue another event request
+                    onEventCompleted()
+                }
+            }
+
+            function pauseEvents() {
+                continueEvents = false;
+            }
+
+            //------------------------------
+            // utility functions
+            //------------------------------
+
+            function randomIdString() {
+                //Make the biggest positive int random number possible (it doesn't have to be positive really)
+                //and express it as a string in the largest base possible
+                //Prefix with a letter ("f" for field) so we can use this as a field name symbol in R (as in data$f4j543k45) 
+                return "f" + Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString(32)
+            }
+
+            //------------------------------
+            // session functions
+            //------------------------------
+
+            const EVENT_DELAY = 10 //this is thrown in just because
+            function onEventCompleted() {
+                if(continueEvents) {
+                    setTimeout(listenForEvents,EVENT_DELAY)
+                }
+            }
+
+            //-------------------------
+            // RPC and Other Requests
+            //-------------------------
+
+            /** This function sends a generic RPC command. If the command includes a field "processResponse",
+             * this is called to process the response. The response json is also printed. */
+            function sendCommand(cmd) {
+                rSessionApi.sendRpcRequest(cmd.scope,cmd.method,cmd.params).then(response => {
+                    console.log("Command response: " + JSON.stringify(response))
+
+                    if(cmd.processResponse) cmd.processResponse(response)
+                }).catch(e => {
+                    if(e) console.log(e.toString())
+                    else console.log("Unknown error in request")
+                })
+            }
+
+            /** This funtion listens for and processes events. */
+            function getEvents() {
+                let scope = "events"
+                let method = "get_events"
+                let params = [eventIndex]
+                rSessionApi.sendRpcRequest(scope,method,params).then(response => {
+                    let dt = new Date()
+                    console.log(`Event response - ${dt.getMinutes()}-${dt.getSeconds()}.${dt.getMilliseconds()}`)
+                    if(response.data.result) {
+                        response.data.result.forEach( (entry,index) => {
+                            
+                            console.log(`type: ${entry.type}, index: ${index}`)
+                            console.log(JSON.stringify(entry))
+
+                            if(entry.type == "deferred_init_completed") {
+                                console.log("Init Complete!")
+                                onInitComplete()
+                            }
+                            else if(entry.type == "plots_state_changed") {
+                                let plotFileName = entry.data.filename
+                                rSessionApi.getBinary(plotFileName).then(response => {
+                                        console.log("Graphics file received:")
+                                        console.log(JSON.stringify(response))   
+                                })
+                                .catch(err => {
+                                    console.error("Error getting graphics file:")
+                                    console.error(err.toString())
+                                })
+                            }
+
+                            else if(entry.type == "console_output") {
+                                let lines = entry.data.text.split("\n")
+                                lines.forEach(line => {
+                                    //I don't know why, but the session messages seem to end up inn two different formats
+                                    //when they come out the console
+                                    if(line.endsWith(MESSAGE_END)) {
+                                        let msgChars = null
+                                        if(line.startsWith(MESSAGE_START1)) {
+                                            msgChars = JSON.parse(line.slice(MESSAGE_PREFIX1.length))
+                                        }
+                                        else if(line.startsWith(MESSAGE_START2)) {
+                                            msgChars = JSON.parse(line.slice(MESSAGE_PREFIX2.length))
+                                        }
+
+                                        if(msgChars !== null) {
+                                            try {
+                                                //parse the total message string
+                                                let msgJson = JSON.parse(msgChars.slice(MESSAGE_HEADER.length,-MESSAGE_FOOTER.length))
+                                                console.log("Session Message: ")
+                                                console.log(JSON.stringify(msgJson,null,4))
+                                            }
+                                            catch(error) {
+                                                console.error("Error parsing msg body from session: " + error.toString())
+                                            }
+                                            return
+                                        }
+                                    }
+
+                                    //this is a console message line
+                                    else {
+                                        console.log("> " + line)
+                                    }
+                                })
+                            }
+                            // else if(entry.type == "console_wite_prompt") {
+                            //     console.log("console prompt:")
+                            //     console.log(entry.data)
+                            // }
+                            // else if(entry.type == "console_write_input") {
+                            //     console.log("console input:")
+                            //     console.log(entry.data.text)
+                            // }
+                           
+                            // else {
+                            //     console.log("Unkown: " + entry.type)
+                            //     console.log(JSON.stringify(entry))
+                            // }
+
+                            eventIndex = entry.id
+                            console.log("Index set to " + eventIndex)
+                        })
+                    }
+                    else {
+                        //console.log("Empty result in events")
+                    }
+
+                    onEventCompleted()
+                }).catch(e => {
+                    if(e) console.log(e.toString())
+                    else console.log("Unknown error in request")
+
+                    onEventCompleted()
+                })
+            }
+            
+        </script>
+
+	</head>
+	<body>
+        <p>This is the application!</p>
+        <button onclick="run()">Start</button>
+        <button onclick="pauseEvents()">Pause Events</button>
+	</body>
+</html>

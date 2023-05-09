@@ -1,0 +1,30 @@
+Changes to make the react example work:
+
+1) tsconfig - add the jsx line. The following setting does full conversion of react
+
+{
+  "compilerOptions": {
+    "lib": ["es6", "dom", "scripthost"],
+    "stripInternal": true,
+    "noUnusedLocals": true,
+    "strict": true,
+    "target": "es6",
+    "module": "es2020",
+    "newLine": "lf",
+    "moduleResolution": "node",
+    "jsx": "react"
+  },
+  "include": ["src/**/*.ts","types/*.ts"],
+}
+
+2) CellDisplay.tsx file prints out the same result as I am currently showing
+
+3) dev dependencies added 
+
+	"@types/react": "^18.0.27",
+	"@types/react-dom": "^18.0.10",
+
+4) dependencies added
+
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"

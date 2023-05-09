@@ -1,0 +1,114 @@
+<html>
+	<head>
+
+
+
+<!-- CSS code for the hover popup -->
+<style>
+  .popup {
+    position: absolute;
+    background-color: #f8f8f8;
+    border: 1px solid #ddd;
+    padding: 10px;
+    z-index: 1;
+    font-size: 12px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    max-width: 400px;
+  }
+
+  .name {
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    padding-bottom: 5px;
+  }
+
+  .dimensions {
+    font-size: 14px;
+    font-style: italic;
+    text-align: center;
+    padding-bottom: 10px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+  }
+
+  td {
+    padding: 5px;
+    border: 1px solid #ddd;
+    text-align: center;
+    font-weight: bold;
+  }
+
+  .col-name {
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    padding-top: 10px;
+  }
+
+  .row-name {
+    font-size: 14px;
+    font-weight: bold;
+    padding-right: 10px;
+    text-align: right;
+  }
+
+  .value {
+    font-size: 14px;
+    font-weight: normal;
+  }
+
+  tr:first-child td {
+    font-weight: bold
+}
+</style>
+	</head>
+	<body>
+	
+<!-- HTML code for the hover popup -->
+<div class="popup">
+	<span><strong>myMatrix:</strong> numeric[3,5]</span>
+  <table>
+    <tr>
+      <td></td>
+      <td class="col-name">one</td>
+      <td class="col-name">two</td>
+      <td class="col-name">three</td>
+      <td class="col-name">four</td>
+      <td class="col-name">five</td>
+    </tr>
+    <tr>
+      <td class="row-name">one</td>
+      <td class="value">0.8471</td>
+      <td class="value">0.6231</td>
+      <td class="value">0.0355</td>
+      <td class="value">0.5298</td>
+      <td class="value">0.7146</td>
+    </tr>
+    <tr>
+      <td class="row-name">two</td>
+      <td class="value">0.2522</td>
+      <td class="value">0.8733</td>
+      <td class="value">0.8739</td>
+      <td class="value">0.9967</td>
+      <td class="value">0.4385</td>
+    </tr>
+    <tr>
+      <td class="row-name">three</td>
+      <td class="value">0.5764</td>
+      <td class="value">0.2691</td>
+      <td class="value">0.2766</td>
+      <td class="value">0.1981</td>
+      <td class="value">0.1429</td>
+    </tr>
+  </table>
+</div>
+
+
+
+	</body>
+</html>

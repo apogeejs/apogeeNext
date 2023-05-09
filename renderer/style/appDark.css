@@ -1,0 +1,195 @@
+/***************** app  ****************/
+html {
+    overflow:hidden;
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    bottom:0;
+}
+body {
+    overflow:hidden;
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    bottom:0;
+    padding:0px;
+    margin:0px;
+    font-family: sans-serif;
+    font-size: 14px;
+    color: #fcfcf9;
+    background-color: #1e1e1e;
+}
+.appContainer {
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    bottom:0;
+    display:flex;
+    flex-direction:column;
+}
+.app-editor-container {
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    bottom:0;
+    overflow: hidden;
+}
+
+/***************** Menu Bar  ****************/
+.menu_bar {
+    display: flex;
+    flex-direction: row;
+    color: #555555;
+    background-color: #3c3c3c;
+    height: 33px;
+}
+
+.menu_bar_center {
+    flex-grow: 1;
+    user-select: none;
+    cursor: move;
+    display: inline;
+}
+
+.menu_bar_left {
+    flex-grow: 0;
+    display: inline;
+}
+
+.menu_bar_right {
+    flex-grow: 0;
+    /*float: right;*/
+    display: inline;
+}
+
+/***************** SelectMenu  ****************/
+.selectMenu_wrapper {
+    display: inline;
+    position: relative;
+}
+.selectMenu_label {
+    display: inline;
+    position: relative;
+
+    /* need to set style here and for the menu bar */
+    /*Also, remember we will use this for other inline menus */
+    color: #b9b9b9;
+    /*font-weight: bold;*/
+    padding: 5px;
+    margin: 5px;
+    line-height: 2.0; /* I had trouble with padding and spacing - this was to help. needs work. */
+}
+.selectMenu_select {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    margin-left: 5px;
+    margin-right: 5px;
+
+    /* This is supposed to hide the element. Need to test it on different platforms */
+    background-color: rgba(0,0,0,0);
+    appearance: none;
+    border: none; /* we still get a border for when it has focus. That is ok, but I don't like the look of it too much. */
+
+}
+.selectMenu_option { /* might want to make this specific to select menu */
+    opacity: 1;
+    color: #cbcbca;
+    background-color: #252525;
+}
+.selectMenu_select:hover {
+    background-color: rgba(255,255,255,.2);  /* This covers the label text! Just make it with low opacity. */
+}
+.selectMenu_select:active {
+    background-color: rgba(255,255,255,.2);
+}
+.selectMenu_select:focus-visible {
+    /* this modifies the appearance when it has focus */
+    border: none;
+    outline: 1px solid #b9b9b9;
+}
+
+/***************** tabview  ****************/
+
+.tabView {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    color: #fcfcf9;
+    overflow: hidden;
+}
+.tabView_head {
+    flex-grow: 0;
+    background-color: #252526;
+}
+.tabView_body {
+    position: relative;
+    flex-grow: 1;
+    overflow: hidden;
+}
+.tabView_tab {
+    display: inline-block;
+    padding: 5px;
+}
+.tabView_deselected {
+    color: #959594;
+    background-color: #2d2d2d;
+}
+.tabView_selected {
+    color: #fcfcf9;
+    background-color: #1e1e1e;
+}
+.tabView_frame {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+    background-color: #1e1e1e;
+
+}
+
+
+/* window controls */
+
+.window-controls {
+    display: flex;
+  }
+  
+  .window-control {
+    background-color: transparent;
+    border: none;
+    font-size: 20px;
+    /*padding: 5px;*/
+    cursor: pointer;
+    outline: none;
+    height: 33px;
+    width: 33px;
+  }
+  
+  .window-control .icon {
+    display: block;
+  }
+  
+  .window-control.minimize .icon {
+    color: #c0c0c0;
+  }
+  
+  .window-control.maximize .icon {
+    color: #c0c0c0;
+  }
+  
+  .window-control.close .icon {
+    color: #c0c0c0;
+    background-color: #ff2020;
+  }
+  
+  .window-control:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+  }
+  

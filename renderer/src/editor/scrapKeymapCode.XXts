@@ -1,0 +1,82 @@
+import { EditorView, KeyBinding } from "@codemirror/view"
+import {
+    EditorState, EditorSelection, Transaction, Extension,
+    StateCommand, StateField, StateEffect, MapMode, CharCategory,
+    Text, codePointAt, fromCodePoint, codePointSize,
+    RangeSet, RangeValue
+} from "@codemirror/state"
+import { syntaxTree } from "@codemirror/language"
+
+/// Configures bracket closing behavior for a syntax (via
+/// [language data](#state.EditorState.languageDataAt)) using the `"closeBrackets"`
+/// identifier.
+export interface CloseBracketConfig {
+    /// The opening brackets to close. Defaults to `["(", "[", "{", "'",
+    /// '"']`. Brackets may be single characters or a triple of quotes
+    /// (as in `"''''"`).
+    brackets?: string[]
+    /// Characters in front of which newly opened brackets are
+    /// automatically closed. Closing always happens in front of
+    /// whitespace. Defaults to `")]}:;>"`.
+    before?: string
+    /// When determining whether a given node may be a string, recognize
+    /// these prefixes before the opening quote.
+    stringPrefixes?: string[]
+}
+
+const defaults: Required<CloseBracketConfig> = {
+    brackets: ["(", "[", "{", "'", '"'],
+    before: ")]}:;>",
+    stringPrefixes: []
+}
+
+function config(state: EditorState, pos: number) {
+    return state.languageDataAt<CloseBracketConfig>("closeBrackets", pos)[0] || defaults
+}
+
+/// Command that implements deleting a pair of matching brackets when
+/// the cursor is between them.
+export const deleteBracketPair: StateCommand = ({ state, dispatch }) => {
+    if (state.readOnly) return false
+    let conf = config(state, state.selection.main.head)
+    let tokens = conf.brackets || defaults.brackets
+    let dont = null, changes = state.changeByRange(range => {
+        if (range.empty) {
+            let before = prevChar(state.doc, range.head)
+            for (let token of tokens) {
+                if (token == before && nextChar(state.doc, range.head) == closing(codePointAt(token, 0)))
+                    return {
+                        changes: { from: range.head - token.length, to: range.head + token.length },
+                        range: EditorSelection.cursor(range.head - token.length)
+                    }
+            }
+        }
+        return { range: dont = range }
+    })
+    if (!dont) dispatch(state.update(changes, { scrollIntoView: true, userEvent: "delete.backward" }))
+    return !dont
+}
+
+function nextChar(doc: Text, pos: number) {
+    let next = doc.sliceString(pos, pos + 2)
+    return next.slice(0, codePointSize(codePointAt(next, 0)))
+  }
+  
+  function prevChar(doc: Text, pos: number) {
+    let prev = doc.sliceString(pos - 2, pos)
+    return codePointSize(codePointAt(prev, 0)) == prev.length ? prev : prev.slice(1)
+  }
+
+  const definedClosing = "()[]{}<>"
+
+  function closing(ch: number) {
+    for (let i = 0; i < definedClosing.length; i += 2)
+      if (definedClosing.charCodeAt(i) == ch) return definedClosing.charAt(i + 1)
+    return fromCodePoint(ch < 128 ? ch : ch + 1)
+  }
+
+/// Close-brackets related key bindings. Binds Backspace to
+/// [`deleteBracketPair`](#autocomplete.deleteBracketPair).
+export const closeBracketsKeymap: readonly KeyBinding[] = [
+    { key: "Backspace", run: deleteBracketPair }
+]

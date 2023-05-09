@@ -1,0 +1,11 @@
+{
+  "name": "redit-dev",
+  "version": "2.0.0-DEV-VERSION",
+  "description": "Test program for r session",
+  "main": "./dist/main.js",
+  "scripts": {
+    "tscwin": "..\\node_modules\\.bin\\tsc.cmd -p tsconfig.json",
+    "tsc": "../node_modules/.bin/tsc.cmd -p tsconfig.json"
+  },
+  "author": "Dave Sutter"
+}

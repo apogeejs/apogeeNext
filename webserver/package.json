@@ -1,0 +1,15 @@
+{
+  "name": "dev-project-webserver",
+  "version": "0.1.0",
+  "description": "This is a simple web server to server pages for development",
+  "scripts": {
+    "webstart": "node ./webserver/server.js "
+  },
+  "type": "module",
+  "dependencies": {
+  },
+  "devDependencies": {
+    "express": "^4.18.2"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,98 @@
+<html>
+	<head>
+<style>
+
+table {
+  border-collapse: collapse;
+  font-family: monospace;
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+td {
+  padding: 5px;
+  text-align: center;
+  background-color: #ffffff;
+}
+
+
+td:not(:first-child):not(:first-of-type) {
+  background-color: #f2f2f2;
+}
+
+span {
+  font-family: monospace;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+td:first-child {
+  color: #888888;
+  background-color: #f2f2f2;
+}
+
+tr:first-child td:not(:first-child) {
+  color: #888888;
+  background-color: #f2f2f2;
+}
+
+td:not(:first-child):not(:first-of-type) {
+  background-color: #f7f7f7;
+}
+
+td:not(:first-child):not(:first-of-type):hover {
+  background-color: #f2f2f2;
+}
+
+td:not(:first-child):not(:first-of-type) + td {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+</style>
+	</head>
+	<body>
+	
+<!-- HTML code for the hover popup -->
+<div class="popup">
+	<span><strong>myMatrix</strong> numeric[3,5]</span>
+  <table>
+    <tr>
+      <td></td>
+      <td class="col-name">one</td>
+      <td class="col-name">two</td>
+      <td class="col-name">three</td>
+      <td class="col-name">four</td>
+      <td class="col-name">five</td>
+    </tr>
+    <tr>
+      <td class="row-name">one</td>
+      <td class="value">0.8471</td>
+      <td class="value">0.6231</td>
+      <td class="value">0.0355</td>
+      <td class="value">0.5298</td>
+      <td class="value">0.7146</td>
+    </tr>
+    <tr>
+      <td class="row-name">two</td>
+      <td class="value">0.2522</td>
+      <td class="value">0.8733</td>
+      <td class="value">0.8739</td>
+      <td class="value">0.9967</td>
+      <td class="value">0.4385</td>
+    </tr>
+    <tr>
+      <td class="row-name">three</td>
+      <td class="value">0.5764</td>
+      <td class="value">0.2691</td>
+      <td class="value">0.2766</td>
+      <td class="value">0.1981</td>
+      <td class="value">0.1429</td>
+    </tr>
+  </table>
+</div>
+
+
+
+	</body>
+</html>
