@@ -1,9 +1,0 @@
-# xxx
-67 + 56
-v <- 45 * 4
-==> 
-
-Script(
-    BinaryExpression(Numeric,"+",Numeric),
-    BinaryExpression(Identifier,BinaryExpression(Numeric,"*",Numeric))
-)

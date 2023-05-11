@@ -9,6 +9,7 @@
     "newLine": "lf",
     "moduleResolution": "node",
     "jsx": "react",
+    "baseUrl": "./"
   },
-  "include": ["src/**/*.tsx","src/**/*.ts","types/*.ts"]
+  "include": ["src/**/*.tsx","src/**/*.ts","types/*.ts","lezer-javascript/dist/*.js","lezer-javascript/dist/*.ts"]
 }

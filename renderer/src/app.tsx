@@ -2,8 +2,8 @@ import * as React from "react"
 import { renderAppElement, displayLoadingScreen, initUi } from "./appframe/appUi"
 import { DocSession, DocSessionUpdate, TabState, AppFunctions } from "./appTypes"
 import { getEditor, getEditorText, destroyEditor } from "./editor/editor"
-//import { sessionOutputToEditorView } from "./editor/sessionToEditor"
-//import {startSessionListener,addEventListener,EventPayload,SessionOutputEvent} from "./session/sessionApi"
+import { sessionOutputToEditorView } from "./editor/sessionToEditor"
+import { addEventListener, EventPayload,SessionOutputEvent} from "./session/sessionApi"
 
 
 //start app
@@ -11,11 +11,11 @@ initUi()
 displayLoadingScreen()
 
 //addEventListener("initComplete",onInitComplete)
-//addEventListener("sessionOutput",onSessionOutput)
-//startSessionListener()
+addEventListener("sessionOutput",onSessionOutput)
 
-//dummy init
+// dummy init =================================
 setTimeout(onInitComplete,2000)
+//=============================================
 
 //===================================
 // Types
@@ -48,26 +48,26 @@ function onInitComplete(eventName: string, data: any) {
     renderApp()
 }
 
-// function onSessionOutput(eventName: string, data: EventPayload) {
-//     let sessionOutputEvents = (data as SessionOutputEvent[])
-//     if(sessionOutputEvents.length > 0) {
-//         //I SHOULD WRITE ALL THIS DIFFERENTLY WHEN I CAN REFACTOR THE SESSION OUTPUT FOR MULTI SESSIONS
-//         let docSessionId = sessionOutputEvents[0].session
-//         if(docSessionId !== null) {
-//             let docSession = docSessions[docSessionId]
-//             let editor = docSession.editor
-//             if(editor !== null) {
-//                 sessionOutputToEditorView(editor, data)
-//             }
-//             else {
-//                 console.log("Session event for session with null editor")
-//             }
-//         }
-//         else {
-//             console.log("Session ID missing for session event")
-//         }
-//     }
-// }
+function onSessionOutput(eventName: string, data: EventPayload) {
+    let sessionOutputEvents = (data as SessionOutputEvent[])
+    if(sessionOutputEvents.length > 0) {
+        //I SHOULD WRITE ALL THIS DIFFERENTLY WHEN I CAN REFACTOR THE SESSION OUTPUT FOR MULTI SESSIONS
+        let docSessionId = sessionOutputEvents[0].session
+        if(docSessionId !== null) {
+            let docSession = docSessions[docSessionId]
+            let editor = docSession.editor
+            if(editor !== null) {
+                sessionOutputToEditorView(editor, data)
+            }
+            else {
+                console.log("Session event for session with null editor")
+            }
+        }
+        else {
+            console.log("Session ID missing for session event")
+        }
+    }
+}
 
 function onDocChanged(docSessionId: string) {
     let docSession = docSessions[docSessionId]

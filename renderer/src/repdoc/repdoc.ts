@@ -3,12 +3,8 @@
 import type { Extension} from '@codemirror/state'
 
 import { repdocLint } from './document/repdocLint'
-import { mainCompletions, packageCompletions, keywordCompletions, cleanupExtension } from "./contextInfo/repdocCompletions"
-import { repdocHover } from "./contextInfo/repdocHover"
-import { repdocCursorContext } from "./contextInfo/repdocCursorContext"
-import { repdocBaseTheme, customScrollerTheme } from "./repdocBaseTheme"
-
-import { repdocState } from "./document/repdocState"
+import { repdocState } from './document/repdocState'
+import { repdocBaseTheme, customScrollerTheme } from './repdocBaseTheme'
 
 /** This is the extension to interface with the reactive code model and display the output in the editor */
 export const repdoc = (): Extension => {
@@ -21,13 +17,7 @@ export const repdoc = (): Extension => {
         return [
             repdocBaseTheme,
             repdocState,
-            repdocLint,
-            mainCompletions,
-            packageCompletions,
-            keywordCompletions,
-            repdocCursorContext(),
-            repdocHover,
-            cleanupExtension
+            repdocLint
         ]
     }
     else {
@@ -35,13 +25,7 @@ export const repdoc = (): Extension => {
             repdocBaseTheme,
             customScrollerTheme,
             repdocState,
-            repdocLint,
-            mainCompletions,
-            packageCompletions,
-            keywordCompletions,
-            repdocCursorContext(),
-            repdocHover,
-            cleanupExtension
+            repdocLint
         ]
     }
 }

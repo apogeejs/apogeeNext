@@ -7,7 +7,6 @@ import { StateField, StateEffect } from '@codemirror/state'
 import {SessionOutputEvent,setMaxEvalLine1,PRE_LINE_ID} from "../../session/sessionApi"
 import { getEmptyVarTable } from "../../session/sessionTypes" 
 import { isEmptyCell } from "../nodeUtils"
-import { getUpdatedVarTable } from "../sessionData/sessionValues"
 import { DocState, createDocState } from "./docState"
 import { CellInfo, updateCellInfoDisplay, cellInfoNeedsCreate, isCodeDirty, getCellInfoByIndex }  from "./CellInfo"
 import { CellUpdateInfo, Action, getCUICodeText, getCUIFromLine, getCUIToLine, actionIsAnEdit, 
@@ -87,10 +86,6 @@ function processSessionMessages(transaction: Transaction, docState: DocState) {
                 //we are doing only one session for now
                 let sessionOutputEventData = effect.value[i2] as SessionOutputEvent
                 if(sessionOutputEventData.lineId !== null) {
-                    if(sessionOutputEventData.data.docEnvUpdate !== undefined) {
-                        varTable = getUpdatedVarTable(varTable, sessionOutputEventData.data.docEnvUpdate)
-                    }
-
                     if(sessionOutputEventData.lineId == PRE_LINE_ID) {
                         //special case - initialization of document
                         newCellInfos = docState.cellInfos
@@ -534,111 +529,144 @@ function parseNewCells(editorState: EditorState, oldCellUpdateInfos: CellUpdateI
 
     //walk through the new parse tree
     //and craete new cell infos
+
+    let state = "OUTSIDE"
+    let level = 0
     syntaxTree(editorState).iterate({
         enter: (node) => {
+            level += 1
             //console.log("Entering node " + node.name)
 
             //once we reach a parse error, stop processing the tree
-            if( parseErrorInfo.hasError ) return
+            //if( parseErrorInfo.hasError ) return
+            if(state == "error") return false
 
             switch(node.name) {
 
-                case "Cell": 
-                case "EmptyCell": 
-                case "EndCell": 
-                case "EmptyEnd":
-                {
-                    //get the parameters for the current new cell
-                    let startLine = docText.lineAt(node.from)
-                    let endLine = docText.lineAt(node.to)
-                    
-                    let fromPos = startLine.from
-                    let toPos = endLine.to
-                    let fromLine = startLine.number
-                    let toLine = endLine.number
-                    let codeText = editorState.doc.sliceString(fromPos,toPos).trim()
-
-                    //record the current cell index
-                    if(fromLine <= selectionLine && toLine >= selectionLine) {
-                        activeCellIndex = newCellUpdateInfos.length
-                        activeCellType = node.name
-                    }
-
-                    //if we have cell update infos, find the one that corresponsds to the current start line
-                    if(oldCellUpdateInfos.length > 0) {
-                        while((currentOldFromLine < fromLine) && currentOldIndex < oldCellUpdateInfos!.length - 1) {
-                            currentOldIndex++
-                            oldCellUpdateInfo = oldCellUpdateInfos![currentOldIndex]
-                            //the following entry should be defined if we get here (maybe use a union coe cell info instead)
-                            currentOldFromLine = oldCellUpdateInfo!.newFromLine
-                        }
-                    }
-
-                    let newCellUpdateInfo: CellUpdateInfo | undefined = undefined 
-                    if( (oldCellUpdateInfo !== undefined) && (oldCellUpdateInfo!.cellInfo !== undefined) &&  (oldCellUpdateInfo!.newFromLine == fromLine)) {
-                        let oldCellInfo = oldCellUpdateInfo!.cellInfo!
-                        oldCellUsed[currentOldIndex] = true
-
-                        //NOTE - comparisons to towards the old cell info, not the propogated old cell values, since we are measuring change to previous state
-                        //the propogated old cell values are used to compare the cells and they will be used if we ignore the new parse data.
-                        if(codeText !== oldCellInfo.docCode) {
-                            newCellUpdateInfo = {
-                                action: Action.update,
-                                cellInfo: oldCellInfo,
-                                newFrom: fromPos,
-                                newTo: toPos,
-                                newFromLine: fromLine,
-                                newToLine: toLine,
-                                codeText: codeText
-                            }
-                        }
-                        else if( oldCellInfo.from != fromPos || oldCellInfo.to != toPos || oldCellInfo.fromLine != fromLine || oldCellInfo.toLine != toLine ) {
-
-                            newCellUpdateInfo = {
-                                action: Action.remap,
-                                cellInfo: oldCellInfo,
-                                newFrom: fromPos,
-                                newTo: toPos,
-                                newFromLine: fromLine,
-                                newToLine: toLine
-                            }
-                        }
-                        else {
-                            newCellUpdateInfo = {
-                                action: Action.reuse,
-                                cellInfo: oldCellInfo,
-                                newFromLine: fromLine
-                            }
-                        }
-                    }
-                    else {
-                        newCellUpdateInfo = {
-                            action: Action.create,
-                            newFrom: fromPos,
-                            newTo: toPos,
-                            newFromLine: fromLine,
-                            newToLine: toLine,
-                            codeText: codeText
-                        }
-                    }           
-
-                    newCellUpdateInfos.push(newCellUpdateInfo)
+                case "Script": {
+                    state = "script"
+                    console.log("script entered")
                     break
                 }
-                 
+
                 case "\u26A0": {
                     console.log("Parse Error!")
+                    state = "error"
                     parseErrorInfo.hasError = true
+                    //below is commented out in repdoc
                     //let e = {from: node.from, to: node.to, msg: "Preparse error"}
                     //parseErrorInfo.errors.push(e)
+                    return false;
                 }
 
-                default:
+                default: {
+                    if(state == "script") {
+                        state = "statement"
+                        console.log("top level statement entered: " + node.type.name)
+                        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                        {
+                            //get the parameters for the current new cell
+                            let startLine = docText.lineAt(node.from)
+                            let endLine = docText.lineAt(node.to)
+                            
+                            let fromPos = startLine.from
+                            let toPos = endLine.to
+                            let fromLine = startLine.number
+                            let toLine = endLine.number
+                            let codeText = editorState.doc.sliceString(fromPos,toPos).trim()
+        
+                            //record the current cell index
+                            if(fromLine <= selectionLine && toLine >= selectionLine) {
+                                activeCellIndex = newCellUpdateInfos.length
+                                activeCellType = node.name
+                            }
+        
+                            //if we have cell update infos, find the one that corresponsds to the current start line
+                            if(oldCellUpdateInfos.length > 0) {
+                                while((currentOldFromLine < fromLine) && currentOldIndex < oldCellUpdateInfos!.length - 1) {
+                                    currentOldIndex++
+                                    oldCellUpdateInfo = oldCellUpdateInfos![currentOldIndex]
+                                    //the following entry should be defined if we get here (maybe use a union coe cell info instead)
+                                    currentOldFromLine = oldCellUpdateInfo!.newFromLine
+                                }
+                            }
+        
+                            let newCellUpdateInfo: CellUpdateInfo | undefined = undefined 
+                            if( (oldCellUpdateInfo !== undefined) && (oldCellUpdateInfo!.cellInfo !== undefined) &&  (oldCellUpdateInfo!.newFromLine == fromLine)) {
+                                let oldCellInfo = oldCellUpdateInfo!.cellInfo!
+                                oldCellUsed[currentOldIndex] = true
+        
+                                //NOTE - comparisons to towards the old cell info, not the propogated old cell values, since we are measuring change to previous state
+                                //the propogated old cell values are used to compare the cells and they will be used if we ignore the new parse data.
+                                if(codeText !== oldCellInfo.docCode) {
+                                    newCellUpdateInfo = {
+                                        action: Action.update,
+                                        cellInfo: oldCellInfo,
+                                        newFrom: fromPos,
+                                        newTo: toPos,
+                                        newFromLine: fromLine,
+                                        newToLine: toLine,
+                                        codeText: codeText
+                                    }
+                                }
+                                else if( oldCellInfo.from != fromPos || oldCellInfo.to != toPos || oldCellInfo.fromLine != fromLine || oldCellInfo.toLine != toLine ) {
+        
+                                    newCellUpdateInfo = {
+                                        action: Action.remap,
+                                        cellInfo: oldCellInfo,
+                                        newFrom: fromPos,
+                                        newTo: toPos,
+                                        newFromLine: fromLine,
+                                        newToLine: toLine
+                                    }
+                                }
+                                else {
+                                    newCellUpdateInfo = {
+                                        action: Action.reuse,
+                                        cellInfo: oldCellInfo,
+                                        newFromLine: fromLine
+                                    }
+                                }
+                            }
+                            else {
+                                newCellUpdateInfo = {
+                                    action: Action.create,
+                                    newFrom: fromPos,
+                                    newTo: toPos,
+                                    newFromLine: fromLine,
+                                    newToLine: toLine,
+                                    codeText: codeText
+                                }
+                            }           
+        
+                            newCellUpdateInfos.push(newCellUpdateInfo)
+                            //break
+                        }
+
+                        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                    }
+                    else if(state == "statement") {
+                        console.log(" - child node entered: " + node.type.name)
+                    }
+                    else {
+                        console.log(`Unknown state in process: ${state}; node type = ${node.type.name} `)
+                    }
                     break
+                }
             }
         },
-        leave: node => {
-            //console.log("Leaving node " + node.name)
+
+        leave: (node) => {
+            level -= 1
+            if(level == 2) {
+                state = "statement"
+            }
+            else if(level == 1) {
+                state = "script"
+            }
+            else if(level < 1) {
+                state = "OUTSIDE"
+            } 
         }
     })
 
@@ -675,3 +703,86 @@ function parseNewCells(editorState: EditorState, oldCellUpdateInfos: CellUpdateI
         newActiveEditType: activeEditType
     }
 }
+
+
+// function childNodeProcessor(node: SyntaxNode) {
+
+  
+//     //get the parameters for the current new cell
+//     let startLine = docText.lineAt(node.from)
+//     let endLine = docText.lineAt(node.to)
+    
+//     let fromPos = startLine.from
+//     let toPos = endLine.to
+//     let fromLine = startLine.number
+//     let toLine = endLine.number
+//     let codeText = editorState.doc.sliceString(fromPos,toPos).trim()
+
+//     //record the current cell index
+//     if(fromLine <= selectionLine && toLine >= selectionLine) {
+//         activeCellIndex = newCellUpdateInfos.length
+//         activeCellType = node.name
+//     }
+
+//     //if we have cell update infos, find the one that corresponsds to the current start line
+//     if(oldCellUpdateInfos.length > 0) {
+//         while((currentOldFromLine < fromLine) && currentOldIndex < oldCellUpdateInfos!.length - 1) {
+//             currentOldIndex++
+//             oldCellUpdateInfo = oldCellUpdateInfos![currentOldIndex]
+//             //the following entry should be defined if we get here (maybe use a union coe cell info instead)
+//             currentOldFromLine = oldCellUpdateInfo!.newFromLine
+//         }
+//     }
+
+//     let newCellUpdateInfo: CellUpdateInfo | undefined = undefined 
+//     if( (oldCellUpdateInfo !== undefined) && (oldCellUpdateInfo!.cellInfo !== undefined) &&  (oldCellUpdateInfo!.newFromLine == fromLine)) {
+//         let oldCellInfo = oldCellUpdateInfo!.cellInfo!
+//         oldCellUsed[currentOldIndex] = true
+
+//         //NOTE - comparisons to towards the old cell info, not the propogated old cell values, since we are measuring change to previous state
+//         //the propogated old cell values are used to compare the cells and they will be used if we ignore the new parse data.
+//         if(codeText !== oldCellInfo.docCode) {
+//             newCellUpdateInfo = {
+//                 action: Action.update,
+//                 cellInfo: oldCellInfo,
+//                 newFrom: fromPos,
+//                 newTo: toPos,
+//                 newFromLine: fromLine,
+//                 newToLine: toLine,
+//                 codeText: codeText
+//             }
+//         }
+//         else if( oldCellInfo.from != fromPos || oldCellInfo.to != toPos || oldCellInfo.fromLine != fromLine || oldCellInfo.toLine != toLine ) {
+
+//             newCellUpdateInfo = {
+//                 action: Action.remap,
+//                 cellInfo: oldCellInfo,
+//                 newFrom: fromPos,
+//                 newTo: toPos,
+//                 newFromLine: fromLine,
+//                 newToLine: toLine
+//             }
+//         }
+//         else {
+//             newCellUpdateInfo = {
+//                 action: Action.reuse,
+//                 cellInfo: oldCellInfo,
+//                 newFromLine: fromLine
+//             }
+//         }
+//     }
+//     else {
+//         newCellUpdateInfo = {
+//             action: Action.create,
+//             newFrom: fromPos,
+//             newTo: toPos,
+//             newFromLine: fromLine,
+//             newToLine: toLine,
+//             codeText: codeText
+//         }
+//     }           
+
+//     newCellUpdateInfos.push(newCellUpdateInfo)
+//     break
+// })
+

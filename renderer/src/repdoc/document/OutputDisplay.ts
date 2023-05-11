@@ -56,7 +56,9 @@ export default class OutputDisplay extends WidgetType {
     }
 
     update() {
-        this.isVisible = (this.cellInfo.errorInfos.length > 0)||(this.cellInfo.consoleLines.length > 0)||(this.cellInfo.plots.length > 0)
+        //////////////////
+        this.isVisible = true
+        //this.isVisible = (this.cellInfo.errorInfos.length > 0)||(this.cellInfo.consoleLines.length > 0)||(this.cellInfo.plots.length > 0)
         this.updateStatus()
         this.updateErrors()
         this.updateConsole()
@@ -68,6 +70,8 @@ export default class OutputDisplay extends WidgetType {
             this.element = document.createElement("div")
             this.element.className = this.getCssName()
             this.updateStatus()
+
+            this.element.textContent = "Cell " + this.cellInfo.id
 
             this.errorElement = document.createElement("div")
             this.element.appendChild(this.errorElement)

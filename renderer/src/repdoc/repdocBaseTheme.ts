@@ -4,24 +4,37 @@
 
 import {EditorView} from "@codemirror/view"
 
+
+
+const outputBackground = "#303030",
+outputBorder = "1px solid #606060",
+dirtyCodeBackground = "#0d0e2f",
+pendingCodeBackground = "#3a3417",
+pendingOutputBackground = "#564a10",
+pendingOutputOpacity = "0.5"
+
+//-------------------
+//repdoc specific
+//-------------------
+
 export const customScrollerTheme = EditorView.theme({
   "& .cm-scroller::-webkit-scrollbar": {
       "width": "20px",
   },
-  //".cm-scroller::-webkit-scrollbar-corner": {
-      //"background": "rgba(0,0,0,0)"
-  //},
+  ".cm-scroller::-webkit-scrollbar-corner": {
+      "background": "rgba(0,0,0,0)"
+  },
   "& .cm-scroller::-webkit-scrollbar-thumb": {
-      //"background-color": "#424242",  
       "border-radius": "6px",
-      //"border": "4px solid #393939",
       "background-clip": "content-box",
       "min-width": "32px",
-      "min-height": "32px"
+      "min-height": "32px",
+      "border": "4px solid #393939",
+      "background-color": "#424242"
   },
-  //".cm-scroller::-webkit-scrollbar-track": {
-      //"background-color": "#1e1e1e"
-  //},
+  ".cm-scroller::-webkit-scrollbar-track": {
+      "background-color": "#1e1e1e"
+  }
 })
 
 export const repdocBaseTheme = EditorView.baseTheme({
@@ -41,97 +54,23 @@ export const repdocBaseTheme = EditorView.baseTheme({
   "&dark .cm-rd-wrnText": {color: "orange", fontWeight: "bold"},
   "&dark .cm-rd-msgText": {color: "lightblue"},
 
+  ".cm-rd-codeDirtyShade": {backgroundColor: dirtyCodeBackground},
+  ".cm-rd-valuePendingShade": {backgroundColor: pendingCodeBackground},
+
   //=================
   // Output Display
   //=================
 
   ".cm-outputdisplay-base": {
-    //"border": "1px solid #606060",
+    "border": outputBorder,
     "padding": "5px",
     "borderRadius": "3px",
     "marginRight": "5px" 
   },
 
-  //==================
-  // Var Display CSS
-  //==================
+  ".cm-outdisplay-code-dirty": {backgroundColor: outputBackground},
+  ".cm-outdisplay-inputs-dirty": {backgroundColor: pendingOutputBackground, opacity: pendingOutputOpacity}, 
+  ".cm-outdisplay-pending": {backgroundColor: pendingOutputBackground, opacity: pendingOutputOpacity},
+  ".cm-outdisplay-clean": {backgroundColor: outputBackground},
 
-  ".cm-vardisplay-main": { 
-    "marginLeft": "15px",
-    "paddingLeft": "5px",
-    "paddingRight": "5px",
-    "borderRadius": "3px",
-    //"backgroundColor": "#303030",
-    //"border": "1px solid #606060",
-  },
-  ".cm-vd-fullContainer": {
-    "backgroundColor": "transparent"
-  },
-
-  ".cm-vd-wrapperSpan": {
-    "fontFamily": "monospace",
-  },
-
-  ".cm-vd-varTable": {
-    "borderCollapse": "collapse",
-    "fontFamily": "monospace",
-    "margin": "5px",
-    //"outline": "1px solid #383838"
-  },
-
-  // ".cm-vd-varName": {
-  //   "color": "#5294E2"
-  // },
-  // ".cm-vd-varType": {
-  //   "color": "#A9A9F2"
-  // },
-  // ".cm-vd-shortKeyLabel": {
-  //   "color": "#CCCCCC",
-  // },
-  ".cm-vd-notFirst": {
-    "marginLeft": "5px"
-  },
-  ".cm-vd-shortKeyBody": {
-    "marginLeft": "5px",
-    //"color": "#FFFFFF",
-  },
-
-  ".cm-vd-titleContainer": {
-    "margin": "5px",
-  },
-  ".cm-vd-extraContainer": {
-    "margin": "5px",
-    //"backgroundColor": "#383838"
-  },
-  ".cm-vd-linesContainer": {
-    "padding": "5px",
-  },
-
-  ".cm-vd-tableNameCell": {
-    "padding": "1px 3px",
-    "textAlign": "center",
-    //"color": "#888888",
-    //"backgroundColor": "#383838"
-  },
-  ".cm-vd-verticalText": {
-    "writingMode": "vertical-rl",
-    "textOrientation": "upright"
-  },
-  ".cm-vd-tableIndexCell": {
-    "padding": "1px 3px",
-    "textAlign": "center",
-    "fontStyle": "italic",
-    //"color": "#888888",
-    //"backgroundColor": "#383838"
-  },
-  ".cm-vd-tableCornerCell": {
-    "padding": "1px 3px",
-    //"backgroundColor": "#383838"
-  },
-  ".cm-vd-tableValueCell": {
-    "padding": "2px 5px",
-    "textAlign": "center",
-    //"color": "#FFFFFF",
-    //"backgroundColor": "transparent"
-  }
 })
