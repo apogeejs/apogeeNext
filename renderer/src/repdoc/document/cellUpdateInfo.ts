@@ -18,7 +18,6 @@ export type CellUpdateInfo = {
     newFromLine: number //we require this one
     newToLine: number //I ADDED REQUIRING THIS, just to make my implementation easier
     codeText?: string
-    remapLength?: number //I need this flag just for propogated cell info (but not parsed cell info)
 }
 
 
@@ -41,7 +40,7 @@ export function getModUpdateInfo(cellInfo: CellInfo, docText: Text,changes: Chan
     let newToLine = newToLineObject.number  
     let newTo = newToLineObject.to
     let codeText = docText.sliceString(newFrom,newTo).trim()
-    if(codeText !== cellInfo.docCode) {
+    if(codeText !== cellInfo.fieldInfo.docCode) {
         return {action: Action.update, cellInfo, newFrom, newFromLine, newTo, newToLine,codeText}
     }
     else {
@@ -99,7 +98,7 @@ export function getCUIToLine(cui: CellUpdateInfo) {
 
 export  function getCUICodeText(cui: CellUpdateInfo) {
     if(cui.codeText !== undefined) return cui.codeText
-    else if(cui.cellInfo !== undefined) return cui.cellInfo!.docCode
+    else if(cui.cellInfo !== undefined) return cui.cellInfo!.fieldInfo.docCode
     else throw new Error("Unexpected: code text not found in cell update info")
 }
 

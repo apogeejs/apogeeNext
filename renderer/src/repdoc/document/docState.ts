@@ -1,7 +1,7 @@
 import { Decoration} from "@codemirror/view"
 import type { Range } from '@codemirror/state'
 import { RangeSet } from '@codemirror/state' 
-import { CellInfo, pushDecorations, isCodeDirty }  from "./CellInfo"
+import { CellInfo, isCodeDirty }  from "./CellInfo"
 
 export type DocState = {
     docVersion: number
@@ -16,7 +16,7 @@ export type DocState = {
 export function createDocState(cellInfos: CellInfo[], docVersion: number,parseTreeUsed: boolean, hasParseErrors: boolean): DocState {
     let decorations: Range<Decoration>[] = []
     if(cellInfos.length > 0) {
-        cellInfos.forEach(cellInfo => pushDecorations(cellInfo,decorations))
+        cellInfos.forEach(cellInfo => cellInfo.pushDecorations(decorations))
     }
 
     return {
