@@ -1,13 +1,11 @@
 import { Decoration} from "@codemirror/view"
 import type { Range } from '@codemirror/state'
-import { RangeSet } from '@codemirror/state'
-import { VarTable } from "../../session/sessionTypes" 
+import { RangeSet } from '@codemirror/state' 
 import { CellInfo, pushDecorations, isCodeDirty }  from "./CellInfo"
 
 export type DocState = {
     docVersion: number
     cellInfos: CellInfo[]
-    varTable: VarTable
     parseTreeCurrent: boolean
     hasParseErrors: boolean
     hasDirtyCells: boolean
@@ -15,7 +13,7 @@ export type DocState = {
 }
 
 /** This function creates a docState object. */
-export function createDocState(cellInfos: CellInfo[], varTable: VarTable, docVersion: number,parseTreeUsed: boolean, hasParseErrors: boolean): DocState {
+export function createDocState(cellInfos: CellInfo[], docVersion: number,parseTreeUsed: boolean, hasParseErrors: boolean): DocState {
     let decorations: Range<Decoration>[] = []
     if(cellInfos.length > 0) {
         cellInfos.forEach(cellInfo => pushDecorations(cellInfo,decorations))
@@ -24,7 +22,6 @@ export function createDocState(cellInfos: CellInfo[], varTable: VarTable, docVer
     return {
         docVersion: docVersion,
         cellInfos: cellInfos,
-        varTable: varTable,
         parseTreeCurrent: parseTreeUsed,
         hasParseErrors: hasParseErrors,
         hasDirtyCells: cellInfos.some(cellInfo => isCodeDirty(cellInfo) ),

@@ -16,8 +16,9 @@ export type CellUpdateInfo = {
     newFrom?: number
     newTo?: number
     newFromLine: number //we require this one
-    newToLine?: number
+    newToLine: number //I ADDED REQUIRING THIS, just to make my implementation easier
     codeText?: string
+    remapLength?: number //I need this flag just for propogated cell info (but not parsed cell info)
 }
 
 

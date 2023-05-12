@@ -2,10 +2,8 @@
 import {Decoration} from "@codemirror/view"
 import type {Range, EditorState} from '@codemirror/state'
 import { ErrorInfoStruct, SessionOutputData } from "../../session/sessionApi"
-import { VarTable, CellEnv, EMPTY_CELL_ENV, RValueStruct } from "../../session/sessionTypes"
-import { lookupDocValue } from "../sessionData/sessionValues"
+import { RValueStruct } from "../../session/sessionTypes"
 import OutputDisplay from "./OutputDisplay"
-import VarDisplay from "./VarDisplay"
 
 const INVALID_VERSION_NUMBER = -1
 
@@ -16,51 +14,53 @@ type VarInfo = {
 
 interface CellInfoParams {
     status?: string
+    //--------------
+    // location
     from?: number
     to?: number
     fromLine?: number
     toLine?: number
+    //--------
+    // code
     docCode?: string
     docVersion?: number
     modelCode?: string | null
     modelVersion?: number
     inputVersion?: number
-    consoleLines?: [string,string][]
-    plots?: string[]
-    values?: string[]
-    errorInfos?: ErrorInfoStruct[]
-    varInfos?: VarInfo[] | null
-    cellEnv?: CellEnv
+    //--------------
+    // output
+    errorInfo?: ErrorInfoStruct | null
+    varInfo?: VarInfo | null
+    //--------------
     outputVersion?: number
 }
 
 export class CellInfo {
     readonly id: string = "INVALID" //this used to be set in the constructor, but typescript doesn't acknowledge the current code
     readonly status: string
+    //--------------
+    // location
     readonly from: number = 0 //this used to be set in the constructor, but typescript doesn't acknowledge the current code
     readonly to: number = 0 //this used to be set in the constructor, but typescript doesn't acknowledge the current code
     readonly fromLine: number = 1 //this used to be set in the constructor, but typescript doesn't acknowledge the current code
     readonly toLine: number = 1 //this used to be set in the constructor, but typescript doesn't acknowledge the current code
+    //--------
+    // code
     readonly docCode: string = "" //this used to be set in the constructor, but typescript doesn't acknowledge the current code
     readonly docVersion: number = 0 //this used to be set in the constructor, but typescript doesn't acknowledge the current code
     readonly modelCode: string | null = null
     readonly modelVersion: number = INVALID_VERSION_NUMBER
     readonly inputVersion: number = INVALID_VERSION_NUMBER
-
-    readonly consoleLines: [string,string][] = []
-    readonly plots: string[] = []
-    readonly errorInfos: ErrorInfoStruct[] = []
-    readonly varInfos: VarInfo[] | null = null
-    readonly cellEnv: CellEnv = EMPTY_CELL_ENV
+    //--------------
+    // output data
+    readonly errorInfo: ErrorInfoStruct | null = null
+    readonly varInfo: VarInfo | null = null
     readonly outputVersion: number = INVALID_VERSION_NUMBER
-
+    //--------------
+    // output display
     readonly outputDisplay: OutputDisplay | null = null
     readonly outputDecoration: Decoration | null = null
     readonly outputDecorationRng: Range<Decoration> | null = null
-
-    readonly varDisplay: VarDisplay | null = null
-    readonly varDecoration: Decoration | null = null
-    readonly varDecorationRng: Range<Decoration> | null = null
 
     readonly lineShading: Decoration | null = null
     readonly lineShadingsRng: Range<Decoration>[] | null = null
@@ -101,18 +101,13 @@ export class CellInfo {
             this.fromLine != refCellInfo!.fromLine ||
             this.to != refCellInfo!.to ||
             this.toLine != refCellInfo!.toLine
-        let outputChanged = (cellInfoParams.consoleLines !== undefined || 
-            cellInfoParams.plots !== undefined || 
-            cellInfoParams.errorInfos )
-        let varInfosChanged = cellInfoParams.varInfos !== undefined
+        let outputChanged = cellInfoParams.errorInfo !== undefined || cellInfoParams.varInfo !== undefined || statusChanged
 
         //------------------------------------
         // handle status change / shading change
         //------------------------------------
         let lineShadingChanged = false  //I could detect shading change, instead I just follow the status change
         if( statusChanged ) {
-            outputChanged = true
-
             let className = getLineShadingClass(this)
             if(className !== null) {
                 this.lineShading = Decoration.line({attributes: {class: className}})
@@ -175,45 +170,7 @@ export class CellInfo {
                 this.outputDecorationRng = null
             }
         }
-
-        //------------------------------------
-        // handle output var info change
-        //------------------------------------
-        
-        //we probably want to udpate how this is done - but this is from my old code
-        if(this.varDisplay !== null) this.varDisplay.setCellInfo(this)
-
-        let varDisplayChanged = false
-        if(varInfosChanged) {
-            if(this.varDisplay == null) {
-                this.varDisplay = new VarDisplay(this)
-            }
-            this.varDisplay!.update()
-
-            if(this.varDisplay!.getIsVisible()) {
-                this.varDecoration = Decoration.widget({
-                    widget: this.varDisplay!,
-                    block: false,
-                    side: 1
-                })
-            }
-            else {
-                this.varDecoration = null
-            }
-            
-            varDisplayChanged = true
-        }
-
-        if(varDisplayChanged || cellMoved) {
-            if(this.varDecoration !== null) {
-                this.varDecorationRng = this.varDecoration!.range(this.to) 
-            }
-            else {
-                this.varDecorationRng = null
-            }
-        }
     }
-
 }
 
 
@@ -251,9 +208,6 @@ export function pushDecorations(cellInfo: CellInfo, container: Range<Decoration>
     if(cellInfo.lineShadingsRng !== null) {
         container.push(...cellInfo.lineShadingsRng)
     }
-    if(cellInfo.varDecorationRng != null) {
-        container.push(cellInfo.varDecorationRng)
-    }
     if(cellInfo.outputDecorationRng != null) {
         container.push(cellInfo.outputDecorationRng)
     } 
@@ -276,55 +230,28 @@ export function  remapCellInfo(editorState: EditorState, cellInfo: CellInfo, fro
 
 /** This function creates an updated cell for status and or output (console or plot) changes. */
 export function  updateCellInfoDisplay(editorState: EditorState, cellInfo: CellInfo, 
-    {newStatusUpdate, cellEvalStarted, cellEvalCompleted, 
-        addedConsoleLines, addedPlots, addedValues, addedErrorInfos, lineDisplayDatas, 
-        cellEnv, outputVersion}: SessionOutputData, varTable: VarTable) {
+    {cellEvalStarted, errorInfo, varInfoANY, outputVersion}: SessionOutputData) {
     
     //output version required if evalStarted or evalCompleted is set
     
     if(cellEvalStarted === true) {
         //FOR NOW, UPDATE CELL INFO HERE SO WE CLEAR THE DISPLAY VALUES
-        cellInfo = new CellInfo(editorState,cellInfo,{consoleLines: [], plots: [], values: []})
+        cellInfo = new CellInfo(editorState,cellInfo,{})
     }
 
     let params: CellInfoParams = {}
 
-    if(addedConsoleLines !== undefined) params.consoleLines = cellInfo.consoleLines.concat(addedConsoleLines)
-    if(addedPlots !== undefined) params.plots = cellInfo.plots.concat(addedPlots)
-
-    //error infos are reset on each eval
+    //error info and value are reset on each eval
     if(cellEvalStarted) {
-        params.errorInfos = (addedErrorInfos !== undefined) ? addedErrorInfos : []
+        params.errorInfo = (errorInfo !== undefined) ? errorInfo : null
+        params.varInfo = (varInfoANY !== undefined) ? varInfoANY as VarInfo : null
     }
-    else if(addedErrorInfos !== undefined) params.errorInfos = cellInfo.errorInfos.concat(addedErrorInfos)
+    else {
+        if(errorInfo !== undefined) params.errorInfo = errorInfo
+        if(varInfoANY !== undefined) params.varInfo = varInfoANY as VarInfo
+    }
 
     if(outputVersion !== undefined) params.outputVersion = outputVersion
-    
-    //process the line display data
-    if(lineDisplayDatas !== undefined) {
-        if(lineDisplayDatas === null) {
-            params.varInfos = null
-        }
-        else {
-            params.varInfos = []
-            lineDisplayDatas.forEach(lineDisplayData => {
-                let value = (lineDisplayData.lookupKey !== undefined) ?
-                    lookupDocValue(lineDisplayData.lookupKey, varTable) :
-                    lineDisplayData.value
-
-                if(value !== undefined) {
-                    params.varInfos!.push({
-                        label: lineDisplayData.label,
-                        value
-                    })
-                }
-            })
-        }
-    }
-
-    if(cellEnv !== undefined) {
-        params.cellEnv = cellEnv
-    }
 
     return new CellInfo(editorState,cellInfo,params)
 }

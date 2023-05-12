@@ -9,8 +9,7 @@ import { getEmptyVarTable } from "../../session/sessionTypes"
 import { isEmptyCell } from "../nodeUtils"
 import { DocState, createDocState } from "./docState"
 import { CellInfo, updateCellInfoDisplay, cellInfoNeedsCreate, isCodeDirty, getCellInfoByIndex }  from "./CellInfo"
-import { CellUpdateInfo, Action, getCUICodeText, getCUIFromLine, getCUIToLine, actionIsAnEdit, 
-    createCellInfos, getNewUpdateInfo, getRemapUpdateInfo, getModUpdateInfo ,getReuseUpdateInfo, canDelete } from "./cellUpdateInfo"
+import { CellUpdateInfo, Action, actionIsAnEdit, createCellInfos, canDelete } from "./cellUpdateInfo"
 import { issueSessionCommands } from "./sessionCommands"
 import { sessionOutputEffect } from "../../editor/sessionToEditor"
 import { getSessionId } from "../../editor/editorConfig"
@@ -80,7 +79,6 @@ function processSessionMessages(transaction: Transaction, docState: DocState) {
         let effect = effects[i1]
         if(effect.is(sessionOutputEffect)) { 
             let newCellInfos = docState.cellInfos.concat()
-            let varTable = docState.varTable
 
             for(let i2 = 0; i2 < effect.value.length; i2++) {
                 //we are doing only one session for now
@@ -93,7 +91,7 @@ function processSessionMessages(transaction: Transaction, docState: DocState) {
                     else {
                         let index = getCellInfoByIndex(sessionOutputEventData.lineId,newCellInfos)
                         if(index >= 0) {
-                            newCellInfos[index] = updateCellInfoDisplay(transaction.state,newCellInfos[index], sessionOutputEventData.data, varTable)
+                            newCellInfos[index] = updateCellInfoDisplay(transaction.state,newCellInfos[index], sessionOutputEventData.data)
                         }
                         else {
                             console.error("Session output received but line number not found: " + JSON.stringify(sessionOutputEventData))
@@ -106,7 +104,7 @@ function processSessionMessages(transaction: Transaction, docState: DocState) {
                 }
             }
 
-            docState = createDocState(newCellInfos,varTable,docState.docVersion,docState.parseTreeCurrent,docState.hasParseErrors)
+            docState = createDocState(newCellInfos,docState.docVersion,docState.parseTreeCurrent,docState.hasParseErrors)
         }
     }
 
@@ -115,18 +113,7 @@ function processSessionMessages(transaction: Transaction, docState: DocState) {
 
 //fix the type here
 function printNonLineOutput(sessionOutputEventData: SessionOutputEvent) {
-    if(sessionOutputEventData.data.addedConsoleLines !== undefined) {
-        let lines = sessionOutputEventData.data.addedConsoleLines
-        for(let i = 0; i < lines.length; i++) {
-            if(lines[i][0] == "stdout") {
-                console.log(lines[i][1])
-            }
-            else {
-                console.error(lines[i][1])
-            }
-        }
-        //we'll ignore other stuff in there. it shouldn be there
-    }
+    //PRINT THIS!!!
 }
 
 //--------------------------
@@ -140,14 +127,13 @@ function processDocChanges(editorState: EditorState, transaction: Transaction | 
     let doParseTreeProcess = getProcessParseTree(editorState, transaction, docState) 
     if( (transaction && transaction.docChanged) || doParseTreeProcess ) {
         let docVersion = (docState !== undefined) ? docState.docVersion + 1 : INITIAL_DOCUMENT_VERSION
-        let varTable = (docState !== undefined) ? docState.varTable : getEmptyVarTable() 
         let {cellUpdateInfos,cellsToDelete,hasParseErrors,nonCommandIndex,parseTreeUsed} = getCellUpdateInfo(editorState,transaction,docState,doParseTreeProcess)
         let cellInfos = createCellInfos(editorState,cellUpdateInfos,docVersion)
         setMaxEvalLine1(docSessionId,nonCommandIndex) //note - argument here equals to the last commandIndex - 1, but it is also 1-based rather than 0-based
         if( nonCommandIndex > 0 || cellsToDelete!.length > 0 ) {
             cellInfos = issueSessionCommands(docSessionId, editorState,cellInfos,cellsToDelete,docVersion,nonCommandIndex)
         }
-        return createDocState(cellInfos,varTable,docVersion,parseTreeUsed,hasParseErrors)
+        return createDocState(cellInfos,docVersion,parseTreeUsed,hasParseErrors)
     }
     else {
         if(docState === undefined) throw new Error("Unexpected: doc state misssing") //this shouldn't happen
@@ -161,7 +147,7 @@ function processDocChanges(editorState: EditorState, transaction: Transaction | 
             setMaxEvalLine1(docSessionId, nonCommandIndex) 
             let docVersion = (docState !== undefined) ? docState.docVersion + 1 : INITIAL_DOCUMENT_VERSION
             let cellInfos = issueSessionCommands(docSessionId, editorState,docState.cellInfos,[],docVersion,nonCommandIndex)
-            docState = createDocState(cellInfos,docState.varTable,docVersion,docState.parseTreeCurrent,docState.hasParseErrors) 
+            docState = createDocState(cellInfos,docVersion,docState.parseTreeCurrent,docState.hasParseErrors) 
         }
         return docState!
     }
@@ -310,193 +296,131 @@ function updateOldCells(editorState: EditorState, transaction: Transaction, docS
     if(docState !== undefined) {
         if(transaction.docChanged) {
             let changes = transaction.changes
-            let oldChangeStart = Number.MAX_SAFE_INTEGER
-            let oldChangeEnd = 0
-            //find the change region
-            changes.iterChangedRanges( (fromOld,toOld,fromNew,toNew) => {
-                if(fromOld < oldChangeStart) oldChangeStart = fromOld
-                if(toOld > oldChangeEnd) oldChangeEnd = toOld
+            let prevUpdateInfo: CellUpdateInfo | undefined
+            let prevUpdateInfoAll: CellUpdateInfo[] = []
+            docState.cellInfos.forEach( (cellInfo, index) => {
+                let remappedFrom = changes.mapPos(cellInfo.from,-1)
+                let newFromLineObject = docText.lineAt(remappedFrom)
+                let newFromLine = newFromLineObject.number
+                let newFrom = newFromLineObject.from
+
+                let remappedTo = changes.mapPos(cellInfo.to,1)
+                let newToLineObject = docText.lineAt(remappedTo)
+                let newToLine = newToLineObject.number  
+                let newTo = newToLineObject.to
+
+                let remapLength = remappedTo - remappedFrom
+
+                let codeText = docText.sliceString(newFrom,newTo).trim()
+
+                let updateInfo: CellUpdateInfo | undefined
+                if(codeText !== cellInfo.docCode) {
+                    //update
+                    updateInfo = {action: Action.update, cellInfo, newFrom, newFromLine, newTo, newToLine, codeText, remapLength}
+                }
+                else if(newFrom == cellInfo.from && newTo == cellInfo.to && newFromLine == cellInfo.fromLine && newToLine == cellInfo.toLine) {
+                    //reuse
+                    updateInfo = {action: Action.reuse, cellInfo, newFromLine, newToLine, remapLength}
+                }
+                else {
+                    //remap
+                    updateInfo = {action: Action.remap, cellInfo, newFrom, newFromLine, newTo, newToLine, remapLength}
+                }
+
+                //compare to previous update info!!!
+                let overlap = false
+                if(prevUpdateInfo !== undefined) {
+                    if(updateInfo.newFromLine = prevUpdateInfo.newToLine + 1) {
+                        //no overlap or gap
+                        cellUpdateInfos.push(prevUpdateInfo)
+                    }
+                    else if(updateInfo.newFromLine > prevUpdateInfo.newToLine + 1) {
+                        //add gap!
+                        cellUpdateInfos.push(prevUpdateInfo)
+                        let newFromLine = prevUpdateInfo.newToLine + 1
+                        let newToLine = updateInfo.newFromLine - 1
+                        let newFrom = docText.line(newFromLine).from
+                        let newTo = docText.line(newToLine).to
+                        let gapUpdateInfo = {action: Action.create, 
+                            newFrom,
+                            newFromLine,
+                            newTo,
+                            newToLine,
+                            codeText: docText.sliceString(newFrom,newTo).trim()
+                        }
+                        cellUpdateInfos.push(gapUpdateInfo)
+                    }
+                    else {
+                        /////////////////////////////////////////////////////////////
+                        //overlap - KEEP THE LONGEST (GET A BETTER IMPLEMENTAION!)
+                        //////////////////////////////////////////////////////////////
+
+                        if(prevUpdateInfo.remapLength! > updateInfo.remapLength!) {
+                            if(updateInfo.cellInfo !== undefined && canDelete(updateInfo)) {
+                                cellsToDelete.push(updateInfo.cellInfo)
+                            }
+                            updateInfo = prevUpdateInfo
+                        }
+                        else {
+                            if(prevUpdateInfo.cellInfo !== undefined && canDelete(prevUpdateInfo)) {
+                                cellsToDelete.push(prevUpdateInfo.cellInfo)
+                            }
+                            updateInfo = prevUpdateInfo
+                        }
+                    }
+                }
+
+                //update prev
+                prevUpdateInfo = updateInfo
+                if(overlap) {
+                    prevUpdateInfoAll.push(updateInfo)
+                }
+                else {
+                    prevUpdateInfoAll = [updateInfo]
+                }
+                //overlayPrevUpdateInfo IMPLEMENT!
             })
 
-            // cycle through the cell infos
-            let before = true
-            let after = false
-            let firstMissingLine = 1 //line number is 1 based - this is the first line
-            let prevUpdateInfo: CellUpdateInfo | undefined
-            for(let index = 0; index < docState!.cellInfos.length; index++) {
-                let cellInfo = docState!.cellInfos[index]
-                if(before) {
-                    if(cellInfo.to < oldChangeStart) {
-                        //reuse
-                        let updateInfo = getReuseUpdateInfo(cellInfo)
-                        cellUpdateInfos.push(updateInfo)
-                        firstMissingLine = getCUIToLine(updateInfo) + 1
-                        continue
-                    }
-                    else {
-                        before = false
-                        //fall through
-                    }
-                }
-
-                if(!after) {
-                    if(cellInfo.from <= oldChangeEnd) {
-                        let {pendingUpdateInfo,saves,deletes} = getEditedUpdateInfo(cellInfo,prevUpdateInfo,docText,changes,firstMissingLine)
-                        prevUpdateInfo = pendingUpdateInfo
-                        cellUpdateInfos.push(...saves)
-                        if(deletes.length > 0) cellsToDelete.push(...deletes)
-                        continue
-                    }
-                    else {
-                        after = true
-                        //fall through
-                    }
-                }
-
-                //remap
-                let updateInfo = getRemapUpdateInfo(cellInfo,docText,changes)
-                //see if we have a remaining edited update info to process
-                if(prevUpdateInfo !== undefined) {
-                    let endLine = updateInfo.newFromLine - 1
-                    let gapUpdateInfo = getFinalGapUpdate(endLine,prevUpdateInfo,docText)
-                    cellUpdateInfos.push(prevUpdateInfo)
-                    prevUpdateInfo = undefined
-                    if(gapUpdateInfo !== undefined) cellUpdateInfos.push(gapUpdateInfo)
-                }
-                cellUpdateInfos.push(updateInfo)                
-            }
-
-            //see if we have a remaining edited update info to process
+            //check for end gap!!!
             if(prevUpdateInfo !== undefined) {
-                let endLine = docText.lines //these are one based
-                let gapUpdateInfo = getFinalGapUpdate(endLine,prevUpdateInfo,docText)
                 cellUpdateInfos.push(prevUpdateInfo)
-                prevUpdateInfo = undefined
-                if(gapUpdateInfo !== undefined) cellUpdateInfos.push(gapUpdateInfo)
+                if(prevUpdateInfo.newToLine < docText.lines) {
+                    //add end gap
+                    let newFromLine = prevUpdateInfo.newToLine + 1
+                    let newToLine = docText.lines
+                    let newFrom = docText.line(newFromLine).from
+                    let newTo = docText.line(newToLine).to
+                    let gapUpdateInfo = {action: Action.create, 
+                        newFrom,
+                        newFromLine,
+                        newTo,
+                        newToLine,
+                        codeText: docText.sliceString(newFrom,newTo).trim()
+                    }
+                    cellUpdateInfos.push(gapUpdateInfo)
+                }
             }
+
+            ///////////////////////
+            // show the cell update infos
+            cellUpdateInfos.forEach( (cui,index) => {
+                console.log(`${index}: from=${cui?.newFrom} fromLine=${cui?.newFromLine} to=${cui?.newTo} toLine=${cui?.newToLine} id=${cui.cellInfo?.id} code=${cui.codeText}`)
+            })
         }
         else {
             //if we have no changes return "reuse" cell update infos
             cellUpdateInfos.push(...docState!.cellInfos.map( cellInfo => { return {
                 action: Action.reuse, 
                 cellInfo,
-                newFromLine: cellInfo.fromLine
+                newFromLine: cellInfo.fromLine,
+                newToLine: cellInfo.toLine
             } })) 
         }
-
-        //DEBUG==================
-        let lastLine = 0
-        cellUpdateInfos.forEach(cui => {
-            if(getCUIFromLine(cui) != lastLine+1) {
-                console.log("Error in line ordering!")
-            }
-            lastLine = getCUIToLine(cui)
-        })
-        if(lastLine != docText.lines) {
-            console.log("Error in line number!")
-        }
-        //========================
     }
-
 
     return {
         oldCellUpdateInfos: cellUpdateInfos,
         oldCellsToDelete: cellsToDelete
-    }
-}
-
-//firstMissingLine is used only the first pass, when prevUpdateInfo is not set, to see if we need to fill a start gap.
-function getEditedUpdateInfo(cellInfo: CellInfo, prevUpdateInfo: CellUpdateInfo | undefined, docText: Text, changes: ChangeSet, firstMissingLine: number) {
-    let pendingUpdateInfo: CellUpdateInfo | undefined
-    let saves: CellUpdateInfo[] = []
-    let deletes: CellInfo[] = []
-
-    //update
-    let modUpdateInfo = getModUpdateInfo(cellInfo,docText,changes)
-
-    if(prevUpdateInfo !== undefined) {
-        if(prevUpdateInfo.newToLine! == modUpdateInfo.newFromLine - 1) {
-            //all good
-            saves.push(prevUpdateInfo)
-            pendingUpdateInfo = modUpdateInfo
-        }
-        else if(prevUpdateInfo.newToLine! >= modUpdateInfo.newFromLine) {
-            //overlap
-            let processingDone = false
-            let prevCode = getCUICodeText(prevUpdateInfo)
-            let modCode = getCUICodeText(modUpdateInfo)
-            if(prevCode == modCode) {
-                //the cells occupy the same line(s)
-                if(prevUpdateInfo.cellInfo !== null && prevUpdateInfo.cellInfo?.docCode == modCode) {
-                    if(canDelete(modUpdateInfo)) deletes.push(modUpdateInfo.cellInfo!)
-                    pendingUpdateInfo = prevUpdateInfo
-                    processingDone = true
-                }
-                else if(modUpdateInfo.cellInfo !== null && modUpdateInfo.cellInfo?.docCode == modCode) {
-                    if(canDelete(prevUpdateInfo)) deletes.push(prevUpdateInfo.cellInfo!)
-                    pendingUpdateInfo = modUpdateInfo
-                    processingDone = true
-                }
-            }
-
-            if(!processingDone) {
-                //if neight matches, we will just make a new one
-                let newUpdateInfo = getNewUpdateInfo(prevUpdateInfo!.newFrom!,prevUpdateInfo!.newFromLine,
-                                                     modUpdateInfo!.newTo!,modUpdateInfo!.newToLine,
-                                                     docText)
-                if(canDelete(prevUpdateInfo)) deletes.push(prevUpdateInfo.cellInfo!)
-                if(canDelete(modUpdateInfo)) deletes.push(modUpdateInfo.cellInfo!)
-                pendingUpdateInfo = newUpdateInfo
-            }
-        }
-        else {
-            //gap
-            let startLine = getCUIFromLine(prevUpdateInfo) + 1
-            let startPos = docText.line(startLine).from
-            let endLine = getCUIToLine(modUpdateInfo) - 1 
-            let endPos = docText.line(endLine).to
-            let gapUpdateInfo = getNewUpdateInfo(startPos,startLine,endPos,endLine,docText)
-            saves.push(prevUpdateInfo)
-            saves.push(gapUpdateInfo)
-            pendingUpdateInfo = modUpdateInfo
-        }
-    }
-    else {
-        //check for start gap!
-        let gapUpdateInfo = getStartGapUpdate(firstMissingLine,modUpdateInfo, docText)
-        if(gapUpdateInfo !== undefined) saves.push(gapUpdateInfo)
-
-        pendingUpdateInfo = modUpdateInfo
-    }
-    return { pendingUpdateInfo: pendingUpdateInfo!,saves,deletes}
-}
-
-function getStartGapUpdate(firstMissingLine: number, cellUpdateInfo: CellUpdateInfo, docText: Text) {
-    if( getCUIFromLine(cellUpdateInfo) > firstMissingLine )  {  //line is 1 based
-        //gap
-        let startLine = firstMissingLine
-        let startPos = docText.line(startLine).from
-        let endLine = getCUIFromLine(cellUpdateInfo) - 1
-        let endPos = docText.line(endLine).to
-        return getNewUpdateInfo(startPos,startLine,endPos,endLine,docText)
-    } 
-    else {
-        //no gap
-        return undefined
-    }
-}
-
-function getFinalGapUpdate(endLine: number, prevUpdateInfo: CellUpdateInfo, docText: Text) {
-    if( endLine > getCUIToLine(prevUpdateInfo) )  {
-        //gap
-        let startLine = getCUIToLine(prevUpdateInfo) + 1
-        let startPos = docText.line(startLine).from 
-        let endPos = docText.line(endLine).to
-        return getNewUpdateInfo(startPos,startLine,endPos,endLine,docText)
-    } 
-    else {
-        //no gap
-        return undefined
     }
 }
 
@@ -582,6 +506,9 @@ function parseNewCells(editorState: EditorState, oldCellUpdateInfos: CellUpdateI
                             }
         
                             //if we have cell update infos, find the one that corresponsds to the current start line
+                            /////////////////////////////////////////////////////////////
+                            // GET A BETTER IMPLEMENTATION to selectd oldUpdateInfo
+                            //////////////////////////////////////////////////////////////
                             if(oldCellUpdateInfos.length > 0) {
                                 while((currentOldFromLine < fromLine) && currentOldIndex < oldCellUpdateInfos!.length - 1) {
                                     currentOldIndex++
@@ -590,6 +517,7 @@ function parseNewCells(editorState: EditorState, oldCellUpdateInfos: CellUpdateI
                                     currentOldFromLine = oldCellUpdateInfo!.newFromLine
                                 }
                             }
+
         
                             let newCellUpdateInfo: CellUpdateInfo | undefined = undefined 
                             if( (oldCellUpdateInfo !== undefined) && (oldCellUpdateInfo!.cellInfo !== undefined) &&  (oldCellUpdateInfo!.newFromLine == fromLine)) {
@@ -624,7 +552,8 @@ function parseNewCells(editorState: EditorState, oldCellUpdateInfos: CellUpdateI
                                     newCellUpdateInfo = {
                                         action: Action.reuse,
                                         cellInfo: oldCellInfo,
-                                        newFromLine: fromLine
+                                        newFromLine: fromLine,
+                                        newToLine: toLine
                                     }
                                 }
                             }
@@ -703,86 +632,4 @@ function parseNewCells(editorState: EditorState, oldCellUpdateInfos: CellUpdateI
         newActiveEditType: activeEditType
     }
 }
-
-
-// function childNodeProcessor(node: SyntaxNode) {
-
-  
-//     //get the parameters for the current new cell
-//     let startLine = docText.lineAt(node.from)
-//     let endLine = docText.lineAt(node.to)
-    
-//     let fromPos = startLine.from
-//     let toPos = endLine.to
-//     let fromLine = startLine.number
-//     let toLine = endLine.number
-//     let codeText = editorState.doc.sliceString(fromPos,toPos).trim()
-
-//     //record the current cell index
-//     if(fromLine <= selectionLine && toLine >= selectionLine) {
-//         activeCellIndex = newCellUpdateInfos.length
-//         activeCellType = node.name
-//     }
-
-//     //if we have cell update infos, find the one that corresponsds to the current start line
-//     if(oldCellUpdateInfos.length > 0) {
-//         while((currentOldFromLine < fromLine) && currentOldIndex < oldCellUpdateInfos!.length - 1) {
-//             currentOldIndex++
-//             oldCellUpdateInfo = oldCellUpdateInfos![currentOldIndex]
-//             //the following entry should be defined if we get here (maybe use a union coe cell info instead)
-//             currentOldFromLine = oldCellUpdateInfo!.newFromLine
-//         }
-//     }
-
-//     let newCellUpdateInfo: CellUpdateInfo | undefined = undefined 
-//     if( (oldCellUpdateInfo !== undefined) && (oldCellUpdateInfo!.cellInfo !== undefined) &&  (oldCellUpdateInfo!.newFromLine == fromLine)) {
-//         let oldCellInfo = oldCellUpdateInfo!.cellInfo!
-//         oldCellUsed[currentOldIndex] = true
-
-//         //NOTE - comparisons to towards the old cell info, not the propogated old cell values, since we are measuring change to previous state
-//         //the propogated old cell values are used to compare the cells and they will be used if we ignore the new parse data.
-//         if(codeText !== oldCellInfo.docCode) {
-//             newCellUpdateInfo = {
-//                 action: Action.update,
-//                 cellInfo: oldCellInfo,
-//                 newFrom: fromPos,
-//                 newTo: toPos,
-//                 newFromLine: fromLine,
-//                 newToLine: toLine,
-//                 codeText: codeText
-//             }
-//         }
-//         else if( oldCellInfo.from != fromPos || oldCellInfo.to != toPos || oldCellInfo.fromLine != fromLine || oldCellInfo.toLine != toLine ) {
-
-//             newCellUpdateInfo = {
-//                 action: Action.remap,
-//                 cellInfo: oldCellInfo,
-//                 newFrom: fromPos,
-//                 newTo: toPos,
-//                 newFromLine: fromLine,
-//                 newToLine: toLine
-//             }
-//         }
-//         else {
-//             newCellUpdateInfo = {
-//                 action: Action.reuse,
-//                 cellInfo: oldCellInfo,
-//                 newFromLine: fromLine
-//             }
-//         }
-//     }
-//     else {
-//         newCellUpdateInfo = {
-//             action: Action.create,
-//             newFrom: fromPos,
-//             newTo: toPos,
-//             newFromLine: fromLine,
-//             newToLine: toLine,
-//             codeText: codeText
-//         }
-//     }           
-
-//     newCellUpdateInfos.push(newCellUpdateInfo)
-//     break
-// })
 

@@ -12,15 +12,15 @@ export const repdocLint = linter(view => {
 
   let docState = getDocState(view.state)
   docState.cellInfos.forEach(cellInfo => {
-    cellInfo.errorInfos.forEach(errorInfo => {
-      let pos = getPosition(view.state,cellInfo,errorInfo)
-      diagnostics.push({
-        from: pos,
-        to: pos,
-        severity: "error",
-        message: errorInfo.msg,
-      })
-    })
+    // cellInfo.errorInfos.forEach(errorInfo => {
+    //   let pos = getPosition(view.state,cellInfo,errorInfo)
+    //   diagnostics.push({
+    //     from: pos,
+    //     to: pos,
+    //     severity: "error",
+    //     message: errorInfo.msg,
+    //   })
+    // })
   })
   syntaxTree(view.state).cursor().iterate(node => {
     //don't mark node if it is too close to cursor

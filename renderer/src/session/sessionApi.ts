@@ -23,15 +23,11 @@ export interface LineDisplayData  {
 export type SessionOutputData = {
     newStatusUpdate?: boolean
     cellEvalStarted?: boolean
-    addedConsoleLines?: [string,string][]
-    addedPlots?: string[]
-    addedValues?: string[]
-    addedErrorInfos?: ErrorInfoStruct[]
+
+    errorInfo?: ErrorInfoStruct
+    varInfoANY?: any 
     cellEvalCompleted?: boolean
     outputVersion?: number
-    lineDisplayDatas?: LineDisplayData[]
-    cellEnv?: CellEnv
-    docEnvUpdate?: DocEnvUpdateData
     docEvalCompleted?: boolean
     nextLineIndex1?: number
 }
