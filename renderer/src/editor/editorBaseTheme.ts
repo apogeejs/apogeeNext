@@ -4,7 +4,12 @@
 
 import {EditorView} from "@codemirror/view"
 
-export const customScrollerTheme = EditorView.theme({
+export const editorBaseTheme = EditorView.baseTheme({
+  "&": {height: "100%"},
+  ".cm-scroller": {overflow: "auto"}
+})
+
+export const customScrollerTheme = EditorView.baseTheme({
   "& .cm-scroller::-webkit-scrollbar": {
       "width": "20px",
   },
@@ -22,9 +27,4 @@ export const customScrollerTheme = EditorView.theme({
   ".cm-scroller::-webkit-scrollbar-track": {
       "background-color": "#1e1e1e"
   },
-})
-
-export const apogeeBaseTheme = EditorView.baseTheme({
-  "&": {height: "100%"},
-  ".cm-scroller": {overflow: "auto"}
 })

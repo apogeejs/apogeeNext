@@ -1,6 +1,6 @@
 import * as React from "react"
 import { renderAppElement, displayLoadingScreen, initUi } from "./appframe/appUi"
-import { DocSession, DocSessionUpdate, TabState, AppFunctions } from "./appTypes"
+import { DocSession, DocSessionUpdate, AppFunctions } from "./appTypes"
 import { getEditor, getEditorText, destroyEditor } from "./editor/editor"
 import { sessionOutputToEditorView } from "./editor/sessionToEditor"
 import { addEventListener, EventPayload,SessionOutputEvent} from "./session/sessionApi"
@@ -326,20 +326,20 @@ function getIsDirty() {
 //==============================================
 
 /** This is the lookup function to retrieve a tab element for a given tab state. */
-function getTabElement(tabState: TabState, tabFunctions: AppFunctions) {
-    return <EditorFrame tabState={tabState} tabFunctions={tabFunctions} />
+function getTabElement(docId: string, tabFunctions: AppFunctions) {
+    return <EditorFrame docId={docId} tabFunctions={tabFunctions} />
 }
 
 /** This generates an editor tab object. */
-function EditorFrame({tabState, tabFunctions}:{tabState: TabState, tabFunctions: AppFunctions}) {
+function EditorFrame({docId, tabFunctions}:{docId: string, tabFunctions: AppFunctions}) {
     let tabRef = React.useRef<HTMLDivElement>(null)
     React.useEffect(() => {
         //create editor - (non-react element)
         let element = tabRef.current
-        let docSession = docSessions[tabState.id]
+        let docSession = docSessions[docId]
         if(element !== null && docSession !== undefined) {
             const data = docSession!.lastSavedText !== undefined ? docSession.lastSavedText! : ''
-            docSession.editor = getEditor(tabState,tabFunctions,data,element)
+            docSession.editor = getEditor(docId,tabFunctions,data,element)
             //destroy
             return () => {
                 if(docSession.editor) {

@@ -31,10 +31,11 @@ export interface TabState {
     type: string
 }
 
+/** Note - we make tabId = docId. For now doc is the only tab. */
 export interface AppFunctions {
     selectTab: (tabId: string) => void
     closeTab: (tabId: string) => void
-    getTabElement: (tabState: TabState, tabFunctions: AppFunctions) => React.ReactNode,
-    saveFile: (sessionId?: string, doSaveAs?: boolean) => Promise<boolean>,
-    onDocChanged: (docSessionId: string) => void
+    getTabElement: (tabId: string, tabFunctions: AppFunctions) => React.ReactNode,
+    saveFile: (docId?: string, doSaveAs?: boolean) => Promise<boolean>,
+    onDocChanged: (docId: string) => void
 }
