@@ -76,7 +76,7 @@ function TabTab({tabState, isSelected, tabFunctions}: TabTabProps) {
 function TabFrame({tabState, tabFunctions, showing}: TabFrameProps) {
     return (
         <div style={{display: showing ? '' : "none"}} className="tabView_frame">
-            {tabFunctions.getTabElement(tabState,tabFunctions)}
+            {tabFunctions.getTabElement(tabState.id,tabFunctions)}
         </div>
     )
 }
