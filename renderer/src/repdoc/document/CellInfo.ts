@@ -1,6 +1,6 @@
 /** This file contains a class which manages the state for a cell object. */
 import {Decoration} from "@codemirror/view"
-import type {Range, EditorState} from '@codemirror/state'
+import type {Range, EditorState, ChangeSet, Text} from '@codemirror/state'
 import { ErrorInfoStruct, SessionOutputData } from "../../session/sessionApi"
 import { RValueStruct } from "../../session/sessionTypes"
 import OutputDisplay from "./OutputDisplay"
@@ -12,67 +12,87 @@ type VarInfo = {
     value: RValueStruct
 }
 
+export enum Action {
+    create,
+    update,
+    delete,
+    remap,
+    reuse
+}
+
+export type CellUpdateInfo = {
+    action: Action
+    cellInfo?: CellInfo
+    newFrom?: number
+    newTo?: number
+    newFromLine: number //we require this one
+    newToLine: number //I ADDED REQUIRING THIS, just to make my implementation easier
+    codeText?: string
+    fieldInfoIds: string[]
+}
+
 interface CellInfoParams {
-    // status?: string
-    //--------------
-    // location
     from?: number
     to?: number
     fromLine?: number
     toLine?: number
-    //--------
-    // code
-    // docCode?: string
-    // docVersion?: number
-    // modelCode?: string | null
-    // modelVersion?: number
-    // inputVersion?: number
-    //--------------
-    // output
-    // errorInfo?: ErrorInfoStruct | null
-    // varInfo?: VarInfo | null
-    //--------------
-    // outputVersion?: number
+    docCode?: string
+    docCodeVersion?: number
+    modelCode?: string | null
+    modelCodeVersion?: number
+    fieldInfoIds?: string[]
+    parseError?: boolean //TBR
+    errorMsg?: string //TBR
 }
 
-interface FieldInfoParams {
-    status?: string
-    // code
-    docCode?: string
-    docVersion?: number
-    modelCode?: string | null
-    modelVersion?: number
-    inputVersion?: number
-    //--------------
-    // output
-    errorInfo?: ErrorInfoStruct | null
-    varInfo?: VarInfo | null
-    //--------------
-    outputVersion?: number
-}
 
 export class CellInfo {
-    
-    readonly from: number = 0 //this used to be set in the constructor, but typescript doesn't acknowledge the current code
-    readonly to: number = 0 //this used to be set in the constructor, but typescript doesn't acknowledge the current code
-    readonly fromLine: number = 1 //this used to be set in the constructor, but typescript doesn't acknowledge the current code
-    readonly toLine: number = 1 //this used to be set in the constructor, but typescript doesn't acknowledge the current code
 
+    readonly status: string
+
+    // we need a way to store and display cell level error info, use for parse errors.
+    
+    // doc code is active code during edits
+    // model code (get better name?) is code submitted with fields
+    // after submission, not in edit state. read state from fieldInfo (there should be just one at submit, I don't know if I need to rely on that)
+    readonly docCode: string = ""  //code in the document
+    readonly docCodeVersion: number = INVALID_VERSION_NUMBER
+    readonly modelCode: string | null = null //code from last field submission?
+    readonly modelCodeVersion: number = INVALID_VERSION_NUMBER
+
+    readonly parseError: boolean = false
+    readonly errorMsg: string | null = null
+
+    readonly from: number = 0 // this used to be set in the constructor, but typescript doesn't acknowledge the current code
+    readonly to: number = 0 // this used to be set in the constructor, but typescript doesn't acknowledge the current code
+    readonly fromLine: number = 1 // this used to be set in the constructor, but typescript doesn't acknowledge the current code
+    readonly toLine: number = 1 // this used to be set in the constructor, but typescript doesn't acknowledge the current code
+
+    // maybe I should store a reference rather than the id?
+    readonly fieldInfoIds: string[] = []
+
+    //line shading
     readonly lineShading: Decoration | null = null
     readonly lineShadingsRng: Range<Decoration>[] | null = null
 
-    readonly outputDecorationRng: Range<Decoration> | null = null
+    //ADD CELL-LEVEL ERROR DISPLAY! To be used when there is a parse error that does not allow field creation
 
-    readonly fieldInfo: FieldInfo
+    //output displays w/location from fieldInfos
+    readonly outputDecorationRng: Range<Decoration> | null = null
 
     //======================
     // Methods
     //======================
 
-    constructor(editorState: EditorState, refCellInfo: CellInfo | null, cellInfoParams?: CellInfoParams, fieldInfoParams?: FieldInfoParams) {
+    constructor(editorState: EditorState, refCellInfo: CellInfo | null, cellInfoParams?: CellInfoParams) {
 
         if(refCellInfo !== null) {
            Object.assign(this,refCellInfo!)
+        }
+        else {
+            //id
+            //status
+            //CLEAN UP INITIALIZATION
         }
         Object.assign(this,cellInfoParams)
 
@@ -83,20 +103,11 @@ export class CellInfo {
             this.to != refCellInfo!.to ||
             this.toLine != refCellInfo!.toLine
 
-        //------------------------------------
-        // ref field
-        //------------------------------------
-        let refFieldInfo = refCellInfo !== null ? refCellInfo.fieldInfo : null
-        if(fieldInfoParams !== undefined || refFieldInfo === null) {
-            if(fieldInfoParams === undefined) fieldInfoParams = {}
-            this.fieldInfo = new FieldInfo(refFieldInfo, fieldInfoParams) 
-        }
-        else {
-            this.fieldInfo = refFieldInfo
-        }
+        //! measure the status from all the fieldInfos
+        this.status = getStatus(this,)
 
-        let statusChanged = refFieldInfo !== null ? this.fieldInfo.status != refFieldInfo.status : true
-        let outputDisplayChanged = refFieldInfo !== null ? this.fieldInfo.outputDecoration != refFieldInfo.outputDecoration : true
+        //let statusChanged = refFieldInfo !== null ? this.fieldInfo.status != refFieldInfo.status : true
+        //let outputDisplayChanged = refFieldInfo !== null ? this.fieldInfo.outputDecoration != refFieldInfo.outputDecoration : true
 
         //------------------------------------
         // handle status change / shading change
@@ -148,85 +159,6 @@ export class CellInfo {
             container.push(this.outputDecorationRng)
         } 
     }
-}
-
-export class FieldInfo {
-
-    readonly id: string = "INVALID" //this used to be set in the constructor, but typescript doesn't acknowledge the current code
-    readonly status: string
-    
-    //--------
-    // code
-    readonly docCode: string = "" //this used to be set in the constructor, but typescript doesn't acknowledge the current code
-    readonly docVersion: number = 0 //this used to be set in the constructor, but typescript doesn't acknowledge the current code
-    readonly modelCode: string | null = null
-    readonly modelVersion: number = INVALID_VERSION_NUMBER
-    readonly inputVersion: number = INVALID_VERSION_NUMBER
-    //--------------
-    // output data
-    readonly errorInfo: ErrorInfoStruct | null = null
-    readonly varInfo: VarInfo | null = null
-    readonly outputVersion: number = INVALID_VERSION_NUMBER
-    //--------------
-    // output display
-    readonly outputDisplay: OutputDisplay | null = null
-    readonly outputDecoration: Decoration | null = null
-
-    readonly instanceVersion: number
-
-    constructor(refFieldInfo: FieldInfo | null, fieldInfoParams: FieldInfoParams) {
-
-        if(refFieldInfo === null) {
-            this.id = getId()
-            this.instanceVersion = 1
-
-            //require
-            //from
-            //fo
-            //fromLine
-            //toLine
-            //docCode
-            //docVersion
-            //if(cellInfoParams.docVersion == undefined) throw new Error("Unexpected: doc version not set for new cellinfo")
-        }
-        else {
-           Object.assign(this,refFieldInfo!)
-           this.instanceVersion = refFieldInfo!.instanceVersion + 1
-        }
-        Object.assign(this,fieldInfoParams)
-
-        this.status = determineStatus(this)
-        let statusChanged = refFieldInfo === null ? true : 
-            this.status !== refFieldInfo!.status
-
-        //------------------------------------
-        // handle display change
-        //------------------------------------
-
-        //we probably want to udpate how this is done - but this is from my old code
-        if(this.outputDisplay !== null) this.outputDisplay.setFieldInfo(this)
-
-        let outputChanged = fieldInfoParams.errorInfo !== undefined || fieldInfoParams.varInfo !== undefined || statusChanged
-        if(outputChanged) {
-            if(this.outputDisplay == null) {
-                this.outputDisplay = new OutputDisplay(this)
-            }
-            this.outputDisplay!.update()
-
-            if(this.outputDisplay!.getIsVisible()) {
-                this.outputDecoration = Decoration.widget({
-                    widget: this.outputDisplay!,
-                    block: true,
-                    side: 1
-                })
-            }
-            else {
-                this.outputDecoration = null
-            }
-        }
-
-    }
-
 }
 
 //=================================
@@ -316,15 +248,120 @@ export function  updateCellInfoForInputVersion(editorState: EditorState, cellInf
 }
 
 
+
+//=============================
+// Accessors for the above types
+//=============================
+
+export function canDelete(cellUpdateInfo: CellUpdateInfo) {
+    return ( cellUpdateInfo.cellInfo !== undefined && !cellInfoNeedsCreate(cellUpdateInfo.cellInfo!) )
+}
+
+
+export function getModUpdateInfo(cellInfo: CellInfo, docText: Text,changes: ChangeSet) {
+    let mappedFrom = changes.mapPos(cellInfo.from,-1) 
+    let newFromLineObject = docText.lineAt(mappedFrom)
+    let newFromLine = newFromLineObject.number
+    let newFrom = newFromLineObject.from
+    let mappedTo = changes.mapPos(cellInfo.to,1)
+    let newToLineObject = docText.lineAt(mappedTo)
+    let newToLine = newToLineObject.number  
+    let newTo = newToLineObject.to
+    let codeText = docText.sliceString(newFrom,newTo).trim()
+    if(codeText !== cellInfo.docCode) {
+        return {action: Action.update, cellInfo, newFrom, newFromLine, newTo, newToLine,codeText}
+    }
+    else {
+        return  {action: Action.remap, cellInfo, newFrom, newFromLine, newTo, newToLine}
+    }
+}
+/*
+export function getNewUpdateInfo(newFrom: number, newFromLine: number, newTo: number, newToLine: number, docText: Text) {
+    let codeText = docText.sliceString(newFrom,newTo).trim()
+    return {action: Action.create, newFrom, newFromLine, newTo, newToLine, codeText}
+} 
+
+export function getRemapUpdateInfo(cellInfo: CellInfo, docText: Text, changes: ChangeSet) {
+    let mappedFrom = changes.mapPos(cellInfo.from,1) //"1" means map to the right of insert text at this point
+    let newFromLineObject = docText.lineAt(mappedFrom)
+    let newFromLine = newFromLineObject.number
+    let newFrom = newFromLineObject.from
+    let mappedTo = changes.mapPos(cellInfo.to,-1) //"-1" means map to the left of insert text at this point
+    let newToLineObject = docText.lineAt(mappedTo)
+    let newToLine = newToLineObject.number  
+    let newTo = newToLineObject.to
+    return {action: Action.remap, cellInfo, newFrom, newFromLine, newTo, newToLine}
+}
+
+export function getReuseUpdateInfo(cellInfo: CellInfo) {
+    return {action: Action.reuse, cellInfo, newFromLine: cellInfo.fromLine}
+}
+*/
+
+
+export function actionIsAnEdit(action: Action) {
+    return action == Action.create || action == Action.update || action == Action.delete
+}
+
+
+export function getCUIFrom(cui: CellUpdateInfo) {
+    if(cui.newFrom !== undefined) return cui.newFrom
+    else if(cui.cellInfo !== undefined) return cui.cellInfo!.from
+    else throw new Error("Unexpected: position not found in cell update info")
+}
+
+export function getCUIFromLine(cui: CellUpdateInfo) {
+    return cui.newFromLine
+}
+
+export function getCUITo(cui: CellUpdateInfo) {
+    if(cui.newTo !== undefined) return cui.newTo
+    else if(cui.cellInfo !== undefined) return cui.cellInfo!.to
+    else throw new Error("Unexpected: position not found in cell update info")
+}
+
+export function getCUIToLine(cui: CellUpdateInfo) {
+    if(cui.newToLine !== undefined) return cui.newToLine
+    else if(cui.cellInfo !== undefined) return cui.cellInfo!.toLine
+    else throw new Error("Unexpected: position not found in cell update info")
+}
+
+export  function getCUICodeText(cui: CellUpdateInfo) {
+    if(cui.codeText !== undefined) return cui.codeText
+    else if(cui.cellInfo !== undefined) return cui.cellInfo!.docCode
+    else throw new Error("Unexpected: code text not found in cell update info")
+}
+
+/** This function creates a CellInfo object from a CellUpdateInfo. */
+export function createCellInfos(editorState: EditorState, cellUpdateInfos: CellUpdateInfo[],docVersion:number) {
+
+    return cellUpdateInfos.map( cui => {
+        switch(cui.action) {
+            case Action.create: 
+                return newCellInfo(editorState,cui.newFrom!,cui.newTo!,cui.newFromLine,cui.newToLine!,cui.codeText!,docVersion) 
+
+            case Action.update: 
+                return updateCellInfoCode(editorState,cui.cellInfo!,cui.newFrom!,cui.newTo!,cui.newFromLine,cui.newToLine!,cui.codeText!,docVersion) 
+
+            case Action.remap: 
+                return remapCellInfo(editorState,cui.cellInfo!,cui.newFrom!,cui.newTo!,cui.newFromLine,cui.newToLine!)
+
+            case Action.reuse: 
+                return  cui.cellInfo!
+
+            case Action.delete:
+                throw new Error("Unexpected delete action")
+        }
+    })
+}
+
+
+
+
 //====================================
 // internal functions
 //====================================
 
-//for now we make a dummy id here
-let nextId = 1
-function getId() {
-    return "l" + String(nextId++)
-}
 
 function getLineShadingClass(fieldInfo: FieldInfo) {
     if(fieldInfo.status == "code dirty") {

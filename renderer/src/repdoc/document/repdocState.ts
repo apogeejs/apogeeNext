@@ -7,8 +7,9 @@ import { StateField, StateEffect } from '@codemirror/state'
 import {SessionOutputEvent,setMaxEvalLine1,PRE_LINE_ID} from "../../session/sessionApi"
 import { isEmptyCell } from "../nodeUtils"
 import { DocState, createDocState } from "./docState"
-import { CellInfo, updateCellInfoDisplay, cellInfoNeedsCreate, isCodeDirty, getCellInfoByIndex }  from "./CellInfo"
-import { CellUpdateInfo, Action, actionIsAnEdit, createCellInfos, canDelete } from "./cellUpdateInfo"
+import { CellInfo, updateCellInfoDisplay, cellInfoNeedsCreate, isCodeDirty, getCellInfoByIndex, getCUIFrom, getCUICodeText }  from "./CellInfo"
+import { FieldData, FieldInfo, FieldUpdateInfo, FieldAction, getFieldUpdateInfo }  from "./FieldInfo"
+import { CellUpdateInfo, Action, actionIsAnEdit, createCellInfos, canDelete } from "./CellInfo"
 import { issueSessionCommands } from "./sessionCommands"
 import { sessionOutputEffect } from "../../editor/sessionToEditor"
 import { getSessionId } from "../../editor/editorConfig"
@@ -104,7 +105,7 @@ function processSessionMessages(transaction: Transaction, docState: DocState) {
                 }
             }
 
-            docState = createDocState(newCellInfos,docState.docVersion,docState.parseTreeCurrent,docState.hasParseErrors)
+            docState = createDocState(newCellInfos,{},docState.docVersion,docState.parseTreeCurrent,docState.hasParseErrors)
         }
     }
 
@@ -133,7 +134,7 @@ function processDocChanges(editorState: EditorState, transaction: Transaction | 
         if( nonCommandIndex > 0 || cellsToDelete!.length > 0 ) {
             cellInfos = issueSessionCommands(docSessionId, editorState,cellInfos,cellsToDelete,docVersion,nonCommandIndex)
         }
-        return createDocState(cellInfos,docVersion,parseTreeUsed,hasParseErrors)
+        return createDocState(cellInfos,{},docVersion,parseTreeUsed,hasParseErrors)
     }
     else {
         if(docState === undefined) throw new Error("Unexpected: doc state misssing") //this shouldn't happen
@@ -142,12 +143,12 @@ function processDocChanges(editorState: EditorState, transaction: Transaction | 
             let activeLine = editorState.doc.lineAt(editorState.selection.main.head).number
             let activeCellIndex = docState.cellInfos.findIndex( cellInfo => cellInfo.fromLine >= activeLine && cellInfo.toLine <= activeLine )
             let activeCellInfo = docState.cellInfos[activeCellIndex]
-            let nonCommandIndex = (activeCellInfo === undefined || activeCellInfo!.fieldInfo.status != "code dirty") ? docState.cellInfos.length : 
-                (activeCellInfo.fieldInfo.docCode === "") ? activeCellIndex : 0
+            let nonCommandIndex = (activeCellInfo === undefined || activeCellInfo!.status != "code dirty") ? docState.cellInfos.length : 
+                (activeCellInfo.docCode === "") ? activeCellIndex : 0
             setMaxEvalLine1(docSessionId, nonCommandIndex) 
             let docVersion = (docState !== undefined) ? docState.docVersion + 1 : INITIAL_DOCUMENT_VERSION
             let cellInfos = issueSessionCommands(docSessionId, editorState,docState.cellInfos,[],docVersion,nonCommandIndex)
-            docState = createDocState(cellInfos,docVersion,docState.parseTreeCurrent,docState.hasParseErrors) 
+            docState = createDocState(cellInfos,{},docVersion,docState.parseTreeCurrent,docState.hasParseErrors) 
         }
         return docState!
     }
@@ -158,12 +159,12 @@ function getCellUpdateInfo(editorState: EditorState,
                             docState: DocState | undefined = undefined,
                             doParseTreeProcess: boolean) {
 
-    let {oldCellUpdateInfos, oldCellsToDelete} = updateOldCells(editorState, transaction!, docState)
+    let {oldCellUpdateInfos, oldCellsToDelete} = propagateOldCells(editorState, transaction!, docState)
     let oldHasParseError = docState !== undefined ? docState!.hasParseErrors : false
     
     if(doParseTreeProcess) {
         let {newCellUpdateInfos, newCellsToDelete, parseErrorInfo, newActiveEditIndex, newActiveEditType} = 
-            parseNewCells(editorState, oldCellUpdateInfos, oldCellsToDelete)
+            parseNewCells(editorState, docState, oldCellUpdateInfos)
 
         let fallbackDataPresent = docState !== undefined
         return mergeCellUpdateInfos(newCellUpdateInfos,newCellsToDelete,parseErrorInfo,
@@ -286,7 +287,7 @@ function textAdded(changes: ChangeSet) {
 
 /** This function gets update data for the cells from the previous doc state based on text changes. It
  * does not use the new parse tree. */
-function updateOldCells(editorState: EditorState, transaction: Transaction, docState?: DocState) {
+function propagateOldCells(editorState: EditorState, transaction: Transaction, docState?: DocState) {
     let cellUpdateInfos: CellUpdateInfo[] = []
     let cellsToDelete: CellInfo[] = []
 
@@ -309,21 +310,21 @@ function updateOldCells(editorState: EditorState, transaction: Transaction, docS
                 let newTo = newToLineObject.to
 
                 let codeText = docText.sliceString(newFrom,newTo).trim()
-                //let cellInfos = cellInfo.childCellInfos !== null ? cellInfo.childCellInfos : [cellInfo]
 
+                let fieldInfoIds = cellInfo.fieldInfoIds
 
                 let updateInfo: CellUpdateInfo | undefined
-                if(codeText !== cellInfo.fieldInfo.docCode) {
+                if(codeText !== cellInfo.docCode) {
                     //update
-                    updateInfo = {action: Action.update, cellInfo, newFrom, newFromLine, newTo, newToLine, codeText}
+                    updateInfo = {action: Action.update, cellInfo, newFrom, newFromLine, newTo, newToLine, codeText, fieldInfoIds}
                 }
                 else if(newFrom == cellInfo.from && newTo == cellInfo.to && newFromLine == cellInfo.fromLine && newToLine == cellInfo.toLine) {
                     //reuse
-                    updateInfo = {action: Action.reuse, cellInfo, newFromLine, newToLine}
+                    updateInfo = {action: Action.reuse, cellInfo, newFromLine, newToLine, fieldInfoIds}
                 }
                 else {
                     //remap
-                    updateInfo = {action: Action.remap, cellInfo, newFrom, newFromLine, newTo, newToLine}
+                    updateInfo = {action: Action.remap, cellInfo, newFrom, newFromLine, newTo, newToLine, fieldInfoIds}
                 }
 
                 //compare to previous update info!!!
@@ -345,7 +346,8 @@ function updateOldCells(editorState: EditorState, transaction: Transaction, docS
                             newFromLine,
                             newTo,
                             newToLine,
-                            codeText: docText.sliceString(newFrom,newTo).trim()
+                            codeText: docText.sliceString(newFrom,newTo).trim(),
+                            fieldInfoIds: []
                         }
                         cellUpdateInfos.push(gapUpdateInfo)
                     }
@@ -358,9 +360,9 @@ function updateOldCells(editorState: EditorState, transaction: Transaction, docS
                             updateInfo.newFromLine = prevUpdateInfo.newFromLine
                             updateInfo.codeText = docText.sliceString(newFrom,newTo).trim()
                         }
-                        // if(prevUpdateInfo.cellInfos!.length > 0) {
-                        //     updateInfo.cellInfos!.push(...prevUpdateInfo.cellInfos!)
-                        // }
+                        updateInfo.fieldInfoIds = prevUpdateInfo.fieldInfoIds.concat(updateInfo.fieldInfoIds)
+
+                        if(prevUpdateInfo.cellInfo !== undefined) cellsToDelete.push(prevUpdateInfo.cellInfo)
                     }
                 }
 
@@ -383,7 +385,8 @@ function updateOldCells(editorState: EditorState, transaction: Transaction, docS
                         newFromLine,
                         newTo,
                         newToLine,
-                        codeText: docText.sliceString(newFrom,newTo).trim()
+                        codeText: docText.sliceString(newFrom,newTo).trim(),
+                        fieldInfoIds: []
                     }
                     cellUpdateInfos.push(gapUpdateInfo)
                 }
@@ -395,7 +398,8 @@ function updateOldCells(editorState: EditorState, transaction: Transaction, docS
                 action: Action.reuse, 
                 cellInfo,
                 newFromLine: cellInfo.fromLine,
-                newToLine: cellInfo.toLine
+                newToLine: cellInfo.toLine,
+                fieldInfoIds: cellInfo.fieldInfoIds
             } })) 
         }
     }
@@ -407,10 +411,24 @@ function updateOldCells(editorState: EditorState, transaction: Transaction, docS
 }
 
 /** This function creates new cells based on the updatede document parse tree. */
-function parseNewCells(editorState: EditorState, oldCellUpdateInfos: CellUpdateInfo[], cellsToDelete: CellInfo[] = []) {
+function parseNewCells(editorState: EditorState, 
+    oldDocState: DocState | undefined = undefined, 
+    propCellUpdateInfos: CellUpdateInfo[]) {
     
     //these are the output cell infos
     const newCellUpdateInfos: CellUpdateInfo[] = []
+    const oldFieldInfoMap = oldDocState !== undefined ? oldDocState.fieldInfoMap : {}
+    let fieldUpdateInfoMap: Record<string,FieldUpdateInfo> = {}
+
+    //we use these variables to progress through the cell update info as we process the new parse tree.
+    let currentPropIndex = 0
+    let propCellUpdateInfo: CellUpdateInfo | undefined = undefined
+    let currentPropFromLine = 0
+    let propCellUsed = Array(propCellUpdateInfos.length).fill(false)
+
+    let prevToLine = 0 //one less than first line
+    let prevToPos = -1 //one less than first pos
+    let prevCellUpdateInfo: CellUpdateInfo | null = null
 
     //record if there is a parse error
     let parseErrorInfo: ParseErrorInfo = {
@@ -421,12 +439,7 @@ function parseNewCells(editorState: EditorState, oldCellUpdateInfos: CellUpdateI
     //this is the index of a cell that is actively being edited
     let activeCellIndex = INVALID_CELL_INDEX
     let activeCellType = "" //TEMPORARY - while we work on emtpy cell detection
- 
-    //we use these variables to progress through the cell update info as we process the new parse tree.
-    let currentOldIndex = INVALID_CELL_INDEX
-    let oldCellUpdateInfo: CellUpdateInfo | undefined = undefined
-    let currentOldFromLine = INVALID_LINE_NUMBER
-    let oldCellUsed = Array(oldCellUpdateInfos.length).fill(false)
+
 
     //used to read line nubers from positions
     let docText = editorState.doc
@@ -479,84 +492,95 @@ function parseNewCells(editorState: EditorState, oldCellUpdateInfos: CellUpdateI
                             let toPos = endLine.to
                             let fromLine = startLine.number
                             let toLine = endLine.number
-                            let codeText = editorState.doc.sliceString(fromPos,toPos).trim()
+                            let newCellUpdateInfo: CellUpdateInfo | undefined 
 
-                            ///////////////////////
-                            let cellData = processStatementNode(node.node, docText)
-                            console.log(JSON.stringify(cellData))
-                            ///////////////////////
-        
-                            //record the current cell index
-                            if(fromLine <= selectionLine && toLine >= selectionLine) {
-                                activeCellIndex = newCellUpdateInfos.length
-                                activeCellType = node.name
-                            }
-        
-                            //if we have cell update infos, find the one that corresponsds to the current start line
-                            /////////////////////////////////////////////////////////////
-                            // GET A BETTER IMPLEMENTATION to selectd oldUpdateInfo
-                            //////////////////////////////////////////////////////////////
-                            if(oldCellUpdateInfos.length > 0) {
-                                while((currentOldFromLine < fromLine) && currentOldIndex < oldCellUpdateInfos!.length - 1) {
-                                    currentOldIndex++
-                                    oldCellUpdateInfo = oldCellUpdateInfos![currentOldIndex]
-                                    //the following entry should be defined if we get here (maybe use a union coe cell info instead)
-                                    currentOldFromLine = oldCellUpdateInfo!.newFromLine
-                                }
+                            if(fromLine > prevToLine + 1) {
+                                // add a gap cell, with no fields
+                                let gapFrom = prevToPos + 1
+                                let gapFromLine = prevToLine + 1
+                                let gapTo = fromPos - 1
+                                let gapToLine = fromLine - 1
+                                let gapCodeText = docText.sliceString(gapFrom,gapTo).trim()
+
+                                let gapCellUpdateInfo = createCellUpdateInfo(gapFrom,gapFromLine,gapTo,gapToLine,gapCodeText,
+                                    propCellUpdateInfos)
+
+                                newCellUpdateInfos.push(gapCellUpdateInfo)
                             }
 
-        
-                            let newCellUpdateInfo: CellUpdateInfo | undefined = undefined 
-                            if( (oldCellUpdateInfo !== undefined) && (oldCellUpdateInfo!.cellInfo !== undefined) &&  (oldCellUpdateInfo!.newFromLine == fromLine)) {
-                                let oldCellInfo = oldCellUpdateInfo!.cellInfo!
-                                oldCellUsed[currentOldIndex] = true
-        
-                                //NOTE - comparisons to towards the old cell info, not the propogated old cell values, since we are measuring change to previous state
-                                //the propogated old cell values are used to compare the cells and they will be used if we ignore the new parse data.
-                                if(codeText !== oldCellInfo.fieldInfo.docCode) {
-                                    newCellUpdateInfo = {
-                                        action: Action.update,
-                                        cellInfo: oldCellInfo,
-                                        newFrom: fromPos,
-                                        newTo: toPos,
-                                        newFromLine: fromLine,
-                                        newToLine: toLine,
-                                        codeText: codeText
-                                    }
-                                }
-                                else if( oldCellInfo.from != fromPos || oldCellInfo.to != toPos || oldCellInfo.fromLine != fromLine || oldCellInfo.toLine != toLine ) {
-        
-                                    newCellUpdateInfo = {
-                                        action: Action.remap,
-                                        cellInfo: oldCellInfo,
-                                        newFrom: fromPos,
-                                        newTo: toPos,
-                                        newFromLine: fromLine,
-                                        newToLine: toLine
-                                    }
-                                }
-                                else {
-                                    newCellUpdateInfo = {
-                                        action: Action.reuse,
-                                        cellInfo: oldCellInfo,
-                                        newFromLine: fromLine,
-                                        newToLine: toLine
-                                    }
-                                }
+                            if(fromLine <= prevToLine && prevCellUpdateInfo !== null) {
+                                //merge in with previous cell
+                                let mergeFrom = getCUIFrom(prevCellUpdateInfo)
+                                let mergeFromLine = prevCellUpdateInfo.newFromLine
+                                let mergeTo = toPos
+                                let mergeToLine = toLine
+                                let mergeCodeText = docText.sliceString(mergeFrom,mergeTo).trim()
+
+                                newCellUpdateInfo = createCellUpdateInfo(mergeFrom,mergeFromLine,mergeTo,mergeToLine,mergeCodeText,
+                                    propCellUpdateInfos,prevCellUpdateInfo.fieldInfoIds)
+
                             }
                             else {
-                                newCellUpdateInfo = {
-                                    action: Action.create,
-                                    newFrom: fromPos,
-                                    newTo: toPos,
-                                    newFromLine: fromLine,
-                                    newToLine: toLine,
-                                    codeText: codeText
-                                }
-                            }           
-        
-                            newCellUpdateInfos.push(newCellUpdateInfo)
-                            //break
+                                //create new cell
+                                let codeText = editorState.doc.sliceString(fromPos,toPos).trim()
+                                newCellUpdateInfo = createCellUpdateInfo(fromPos,fromLine,toPos,toLine,codeText,
+                                    propCellUpdateInfos)
+                            }
+
+                            // // add fields for cell update info
+                            // if(newCellUpdateInfo.action == Action.reuse || newCellUpdateInfo.action == Action.remap) {
+                            //     //no change to fields!
+                            // }
+                            // else {
+                            //     //analyze for field change
+                            //     let fieldData = processStatementNode(node.node, docText)
+
+                            //     if(fieldData.valid) {
+                            //         if(fieldUpdateInfoMap[fieldData.fieldName] !== undefined) {
+                            //             //name already exists!
+                            //             throw new Error("Repeat name in field creation not handled!!!")
+                            //         }
+                            //         else {
+                            //             let oldFieldInfo = oldFieldInfoMap[fieldData.fieldName]
+                            //             if(oldFieldInfo !== undefined) {
+                            //                 let fieldUpdateInfo = getFieldUpdateInfo(oldFieldInfo,fieldData)
+                            //                 fieldUpdateInfoMap[fieldData.fieldName] = fieldUpdateInfo
+
+                            //                 newCellUpdateInfo.fieldInfoIds.push(oldFieldInfo.id)
+                            //             }
+                            //             else {
+                            //                 //for now no rename handling!!!
+
+                            //                 //create new field info
+                            //                 let newFieldId = 'ADD THIS!!'
+                            //                 let fieldUpdateInfo = {
+                            //                     action: FieldAction.create,
+                            //                     id: newFieldId,
+                            //                     fieldData
+                            //                 }
+                            //                 fieldUpdateInfoMap[fieldData.fieldName] = fieldUpdateInfo
+
+                            //                 newCellUpdateInfo.fieldInfoIds.push(newFieldId)
+                            //             }
+                            //         }
+                            //     }
+                            //     else {
+                            //         //DOH!!! What do I do when invalid?
+                            //         //I DON'T OAVE THIS WORKED OUT RIGHT
+                            //     }
+
+                                
+                            //     //apply
+
+                            // }
+                            
+                            //add code to track deletes for cell and field
+
+
+                            prevToLine = toLine
+                            prevToPos = toPos
+                            prevCellUpdateInfo = newCellUpdateInfo!
+
                         }
                         /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                     }
@@ -596,19 +620,10 @@ function parseNewCells(editorState: EditorState, oldCellUpdateInfos: CellUpdateI
         }
     }
 
-    //additional cells we need to delete
-    let unusedOldCells: CellInfo[] = []
-    oldCellUsed.forEach( (cellUsed,index) => {
-        if(!cellUsed) {
-            let cellInfo = oldCellUpdateInfos![index].cellInfo
-            if(cellInfo !== undefined && !cellInfoNeedsCreate(cellInfo) ) {
-                unusedOldCells.push(cellInfo)
-            }
-        }
+    //get cells to delete - IMPROVE THIS!!!
+    let cellsToDelete: CellInfo[] = (oldDocState === undefined) ? [] : oldDocState.cellInfos.filter(oldCellInfo => {
+        return !newCellUpdateInfos.some(updateCellInfo => updateCellInfo.cellInfo == oldCellInfo)
     })
-    if(unusedOldCells.length > 0) {
-        cellsToDelete = cellsToDelete.concat(unusedOldCells)
-    }
 
     return {
         newCellUpdateInfos: newCellUpdateInfos,
@@ -619,34 +634,98 @@ function parseNewCells(editorState: EditorState, oldCellUpdateInfos: CellUpdateI
     }
 }
 
-type CellStructureData = {
-    valid: boolean,
-    errorMsg?: string,
-    declarationType: string,
-    varName: string,
-    paramList?: string
-    body: string
+function createCellUpdateInfo(fromPos: number, fromLine: number, 
+        toPos: number, toLine: number,
+        codeText: string, propCellUpdateInfos?: CellUpdateInfo[], fieldInfoIds: string[] = []) {
+    
+    if(propCellUpdateInfos !== undefined) {
+        for(let index = 0; index < propCellUpdateInfos.length; index++) {
+            let propCellUpdateInfo = propCellUpdateInfos[index]
+            let cellFromLine = propCellUpdateInfo.newFromLine
+            if(cellFromLine == fromLine && propCellUpdateInfo.newToLine == toLine) {
+                let oldCellInfo = propCellUpdateInfo.cellInfo
+                if(oldCellInfo !== undefined && oldCellInfo.docCode == codeText) {
+                    if(oldCellInfo.from == fromPos && oldCellInfo.fromLine == fromLine && oldCellInfo.to == toPos && oldCellInfo.toLine == toLine) {
+                        //reuse
+                        return {
+                            action: Action.reuse, 
+                            cellInfo: oldCellInfo, 
+                            newFromLine: fromLine, 
+                            newToLine: toLine, 
+                            fieldInfoIds
+                        }
+                    }
+                    else {
+                        //remap
+                        return {
+                            action: Action.remap, 
+                            cellInfo: oldCellInfo, 
+                            newFrom: fromPos, 
+                            newFromLine: fromLine, 
+                            newTo: toPos, 
+                            newToLine: toLine, 
+                            fieldInfoIds
+                        }
+                    }
+                }
+                else {
+                    //update
+                    return {
+                        action: Action.update, 
+                        cellInfo: oldCellInfo, 
+                        newFrom: fromPos, 
+                        newFromLine: fromLine, 
+                        newTo: toPos, 
+                        newToLine: toLine, 
+                        fieldInfoIds
+                    }
+                }
+            }
+            else if(cellFromLine >= fromLine) {
+                //make a new cell
+                return {
+                    action: Action.create,  
+                    newFrom: fromPos, 
+                    newFromLine: fromLine, 
+                    newTo: toPos, 
+                    newToLine: toLine, 
+                    fieldInfoIds
+                }
+            }
+            //keep looking
+        }
+    }
+    //cell not found - make a new cell
+    return {
+        action: Action.create,  
+        newFrom: fromPos, 
+        newFromLine: fromLine, 
+        newTo: toPos, 
+        newToLine: toLine, 
+        fieldInfoIds
+    }
 }
-
 
 /** her we break from the tree and process the true node */
 //FIX THIS! This was written for dev
 // to do: add comments LineComment, BlockComment
 function processStatementNode(statementNode: SyntaxNode, docText: Text) {
-    let cellData: CellStructureData = {
+    let fieldData: FieldData = {
         valid: true,
         declarationType: "",
-        varName: "",
-        body: ""
+        fieldName: "",
+        body: "",
+        startPos: statementNode.node.from,
+        endPos: statementNode.node.to
     }
     let topLevelType = statementNode.type.name
     if(topLevelType == "VariableDeclaration") {
         let decNode = statementNode.firstChild
         if(decNode !== null) {
-            cellData.declarationType = decNode.type.name
+            fieldData.declarationType = decNode.type.name
             let varNameNode = decNode.nextSibling
             if(varNameNode !== null && varNameNode.name == "VariableDefinition") {
-                cellData.varName = docText.sliceString(varNameNode.from,varNameNode.to)
+                fieldData.fieldName = docText.sliceString(varNameNode.from,varNameNode.to)
                 let equalsNode = varNameNode.nextSibling
                 if(equalsNode !== null && equalsNode.type.name == "Equals") {
                     let nextNode = equalsNode.nextSibling
@@ -655,27 +734,27 @@ function processStatementNode(statementNode: SyntaxNode, docText: Text) {
                             case "ArrowFunction": 
                                 let paramNode = nextNode.firstChild
                                 if(paramNode !== null) {
-                                    cellData.paramList = docText.sliceString(paramNode.from,paramNode.to)
+                                    fieldData.paramList = docText.sliceString(paramNode.from,paramNode.to)
 
                                     let arrowNode = paramNode.nextSibling
                                     if(arrowNode !== null && arrowNode.type.name == "Arrow") {
                                         let bodyNode = arrowNode.nextSibling
                                         if(bodyNode !== null) {
-                                            cellData.body = docText.sliceString(bodyNode.from,bodyNode.to)
+                                            fieldData.body = docText.sliceString(bodyNode.from,bodyNode.to)
                                         }
                                         else {
-                                            cellData.valid = false
-                                            cellData.errorMsg = "Body node missing"
+                                            fieldData.valid = false
+                                            fieldData.errorMsg = "Body node missing"
                                         }
                                     }
                                     else {
-                                        cellData.valid = false
-                                        cellData.errorMsg = "Arrow node missing"
+                                        fieldData.valid = false
+                                        fieldData.errorMsg = "Arrow node missing"
                                     }
                                 }
                                 else {
-                                    cellData.valid = false
-                                    cellData.errorMsg = 'Param list missing'
+                                    fieldData.valid = false
+                                    fieldData.errorMsg = 'Param list missing'
                                 }
                                 break
 
@@ -684,64 +763,64 @@ function processStatementNode(statementNode: SyntaxNode, docText: Text) {
                                 if(keywordNode !== null && keywordNode.type.name == "function") {
                                     let paramNode = keywordNode.nextSibling
                                     if(paramNode !== null) {
-                                        cellData.paramList = docText.sliceString(paramNode.from,paramNode.to)
+                                        fieldData.paramList = docText.sliceString(paramNode.from,paramNode.to)
             
                                         let bodyNode = paramNode.nextSibling
                                         if(bodyNode !== null) {
-                                            cellData.body = docText.sliceString(bodyNode.from,bodyNode.to)
+                                            fieldData.body = docText.sliceString(bodyNode.from,bodyNode.to)
                                         }
                                         else {
-                                            cellData.valid = false
-                                            cellData.errorMsg = "Body node missing"
+                                            fieldData.valid = false
+                                            fieldData.errorMsg = "Body node missing"
                                         }
                                     }
                                     else {
-                                        cellData.valid = false
-                                        cellData.errorMsg = 'Param list missing'
+                                        fieldData.valid = false
+                                        fieldData.errorMsg = 'Param list missing'
                                     }
                                 }
                                 else {
-                                    cellData.valid = false
-                                    cellData.errorMsg = "Keyword node missing"
+                                    fieldData.valid = false
+                                    fieldData.errorMsg = "Keyword node missing"
                                 }
                                 break
 
                             default: 
-                                if(cellData.declarationType == "var") {
-                                    cellData.body = docText.sliceString(nextNode.from,nextNode.to)
+                                if(fieldData.declarationType == "var") {
+                                    fieldData.body = docText.sliceString(nextNode.from,nextNode.to)
                                 }
                                 else {
-                                    cellData.valid = false
-                                    cellData.errorMsg = "Non-function variable declarations are only possible with the 'var' type declaration"
+                                    fieldData.valid = false
+                                    fieldData.errorMsg = "Non-function variable declarations are only possible with the 'var' type declaration"
                                 }
                                 break
                         }
                     }
                     else {
-                        cellData.valid = false
-                        cellData.errorMsg = "Unexpected statement format: no sibling node after equals"
+                        fieldData.valid = false
+                        fieldData.errorMsg = "Unexpected statement format: no sibling node after equals"
                     }
                 }
                 else {
-                    cellData.valid = false
-                    cellData.errorMsg = "Unexpected statement format: equals not after variable definition"
+                    fieldData.valid = false
+                    fieldData.errorMsg = "Unexpected statement format: equals not after variable definition"
                 }
             }
             else {
-                cellData.valid = false
-                cellData.errorMsg = "Unexpected statement format in variable definition"
+                fieldData.valid = false
+                fieldData.errorMsg = "Unexpected statement format in variable definition"
             }
         }
         else {
-            cellData.valid = false
-            cellData.errorMsg = "Unexpected statement format: declaration type missing"
+            fieldData.valid = false
+            fieldData.errorMsg = "Unexpected statement format: declaration type missing"
         }
 
     }   
     else {
-        cellData.valid = false
-        cellData.errorMsg = `Invalid statement type: ${topLevelType}. Only VariableDeclaration supported.`
+        fieldData.valid = false
+        fieldData.errorMsg = `Invalid statement type: ${topLevelType}. Only VariableDeclaration supported.`
     }
 
-    return cellData
+    return fieldData
 }
