@@ -1,6 +1,6 @@
 import type { EditorState } from '@codemirror/state'
 import {CodeCommand,evaluateSessionCmds } from "../../session/sessionApi"
-import { CellInfo, FieldInfo, cellInfoNeedsCreate, isCodeDirty, updateCellInfoForInputVersion, updateCellInfoForCommand }  from "./CellInfo"
+import { CellInfo, cellInfoNeedsCreate, isCodeDirty, updateCellInfoForInputVersion, updateCellInfoForCommand }  from "./CellInfo"
 
 //--------------------------
 // Issue Session Commands
@@ -13,7 +13,7 @@ export function issueSessionCommands(docSessionId: string, editorState: EditorSt
 
     //send all the delete commands if there are any
     cellInfosToDelete.forEach(cellInfo => {
-        commands.push(createDeleteAction(cellInfo.fieldInfo)) 
+        commands.push(createDeleteAction(cellInfo)) 
     })     
 
     //send create/update commands for any cell with code dirty beneat the non-command index
@@ -44,11 +44,11 @@ export function issueSessionCommands(docSessionId: string, editorState: EditorSt
 }
 
 /** This function creates a delete command object. */
-function createDeleteAction(fieldInfo: FieldInfo) {
+function createDeleteAction(cellInfo: CellInfo) {
     //console.log("Delete command: id = " + cellInfo.id)
     let command: CodeCommand = {
         type:"delete",
-        lineId: fieldInfo.id
+        lineId: cellInfo.id
     }
     return command
 }
@@ -58,8 +58,8 @@ function createDeleteAction(fieldInfo: FieldInfo) {
 function createAddUpdateAction(editorState: EditorState, cellInfo: CellInfo, zeroBasedIndex: number, docVersion: number) {
     let command: CodeCommand = {
         type: "",
-        lineId: cellInfo.fieldInfo.id,
-        code: cellInfo.fieldInfo.docCode
+        lineId: cellInfo.id,
+        code: cellInfo.docCode
         
     }
     if(cellInfoNeedsCreate(cellInfo)) {

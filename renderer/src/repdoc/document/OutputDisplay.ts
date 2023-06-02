@@ -3,10 +3,10 @@
 
 import { WidgetType } from "@codemirror/view"
 import { ErrorInfoStruct } from "../../session/sessionApi"
-import { FieldInfo } from "./CellInfo"
+import { CellInfo } from "./CellInfo"
 
 export default class OutputDisplay extends WidgetType {
-    fieldInfo: FieldInfo
+    cellInfo: CellInfo
     activeStatus: string = ""
     isVisible = false
     statusClass = "cm-outdisplay-clean"
@@ -19,9 +19,9 @@ export default class OutputDisplay extends WidgetType {
     // Public Methods
     //============================
 
-    constructor(fieldInfo: FieldInfo) { 
+    constructor(cellInfo: CellInfo) { 
         super() 
-        this.fieldInfo = fieldInfo
+        this.cellInfo = cellInfo
         this.clearActiveValues()
     }
 
@@ -37,13 +37,13 @@ export default class OutputDisplay extends WidgetType {
         this.clearActiveValues()
     }
 
-    setFieldInfo(fieldInfo: FieldInfo) {
-        this.fieldInfo = fieldInfo
+    setFieldInfo(cellInfo: CellInfo) {
+        this.cellInfo = cellInfo
     }
 
     eq(other: OutputDisplay) { 
-        return (other.fieldInfo.id == this.fieldInfo.id) &&
-                (other.fieldInfo.instanceVersion == this.fieldInfo.instanceVersion)
+        return (other.cellInfo.id == this.cellInfo.id) &&
+                (other.cellInfo.instanceVersion == this.cellInfo.instanceVersion)
     }
 
     ignoreEvent() { 
@@ -53,7 +53,7 @@ export default class OutputDisplay extends WidgetType {
     update() {
         //////////////////
         this.isVisible = true
-        //this.isVisible = (this.fieldInfo.errorInfos.length > 0)||(this.fieldInfo.consoleLines.length > 0)||(this.fieldInfo.plots.length > 0)
+        //this.isVisible = (this.cellInfo.errorInfos.length > 0)||(this.cellInfo.consoleLines.length > 0)||(this.cellInfo.plots.length > 0)
         this.updateStatus()
         this.updateError()
         this.updateValue()
@@ -65,7 +65,7 @@ export default class OutputDisplay extends WidgetType {
             this.element.className = this.getCssName()
             this.updateStatus()
 
-            this.element.textContent = "Cell " + this.fieldInfo.id
+            this.element.textContent = "Cell " + this.cellInfo.id
 
             this.errorElement = document.createElement("div")
             this.element.appendChild(this.errorElement)
@@ -83,8 +83,8 @@ export default class OutputDisplay extends WidgetType {
     //==============================
     
     private updateStatus() {
-        if((this.element !== null)&&(this.activeStatus != this.fieldInfo.status)) {
-            this.activeStatus = this.fieldInfo.status
+        if((this.element !== null)&&(this.activeStatus != this.cellInfo.status)) {
+            this.activeStatus = this.cellInfo.status
             this.statusClass = this.activeStatus == "code dirty" ? "cm-outdisplay-code-dirty" :
                                     this.activeStatus == "inputs dirty" ? "cm-outdisplay-inputs-dirty" : 
                                     this.activeStatus == "value pending" ? "cm-outdisplay-pending" : "cm-outdisplay-clean"
