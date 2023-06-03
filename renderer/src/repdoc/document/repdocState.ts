@@ -5,10 +5,10 @@ import {EditorView} from "@codemirror/view"
 import type { EditorState, Transaction, ChangeSet, Text } from '@codemirror/state'
 import { StateField, StateEffect } from '@codemirror/state'
 import {SessionOutputEvent,setMaxEvalLine1,PRE_LINE_ID} from "../../session/sessionApi"
-import { DocState, createDocState } from "./docState"
+import { DocState, createDocState, findStatementInfo } from "./docState"
 import { CellInfo, StatementInfo, updateCellInfoDisplay, cellInfoNeedsCreate, isCodeDirty, getCellInfoByIndex, 
         CellUpdateInfo, Action, actionIsAnEdit, createCellInfos, StatementUpdateInfo, StatementAction,
-        getCUIFromLine, getCUIToLine, cellHasCodeStatement } from "./CellInfo"
+        getCUIFromLine, getCUIToLine, getCUIFrom, getCUITo, getCUICodeText, cellHasCodeStatement } from "./CellInfo"
 import { issueSessionCommands } from "./sessionCommands"
 import { sessionOutputEffect } from "../../editor/sessionToEditor"
 import { getSessionId } from "../../editor/editorConfig"
@@ -128,7 +128,7 @@ function processDocChanges(editorState: EditorState, transaction: Transaction | 
     if( (transaction && transaction.docChanged) || doParseTreeProcess ) {
         let docVersion = (docState !== undefined) ? docState.docVersion + 1 : INITIAL_DOCUMENT_VERSION
         let {cellUpdateInfos,cellsToDelete,hasParseErrors,nonCommandIndex,parseTreeUsed} = getCellUpdateInfo(editorState,transaction,docState,doParseTreeProcess)
-        let cellInfos = createCellInfos(editorState,cellUpdateInfos,docVersion)
+        let cellInfos = createCellInfos(editorState,docState,cellUpdateInfos,docVersion)
         // setMaxEvalLine1(docSessionId,nonCommandIndex) //note - argument here equals to the last commandIndex - 1, but it is also 1-based rather than 0-based
         // if( nonCommandIndex > 0 || cellsToDelete!.length > 0 ) {
         //     cellInfos = issueSessionCommands(docSessionId, editorState,cellInfos,cellsToDelete,docVersion,nonCommandIndex)
@@ -166,9 +166,20 @@ function getCellUpdateInfo(editorState: EditorState,
             parseNewCells(editorState, docState, oldCellUpdateInfos, oldCellsToDelete)
 
         let fallbackDataPresent = docState !== undefined
-        return mergeCellUpdateInfos(newCellUpdateInfos,newCellsToDelete,parseErrorInfo,
+        let TEMP_RESULT = mergeCellUpdateInfos(newCellUpdateInfos,newCellsToDelete,parseErrorInfo,
                                     oldCellUpdateInfos,oldCellsToDelete,oldHasParseError,
                                     fallbackDataPresent, newActiveEditIndex, newActiveEditType)
+
+        ///////////////////////////////////////////////
+        console.log("===================================================")
+        if(TEMP_RESULT.parseTreeUsed) {
+            printCellUpdateInfos("parsed",newCellUpdateInfos,docState)
+        }
+        printCellUpdateInfos("propagated",oldCellUpdateInfos,docState)
+        ///////////////////////////////////////////
+
+        return TEMP_RESULT
+
     }
     else {
         //use old parse info
@@ -182,6 +193,31 @@ function getCellUpdateInfo(editorState: EditorState,
     } 
 
 }
+
+///////////////////////////////////////////////
+function printCellUpdateInfos(label: string, cellUpdateInfos: CellUpdateInfo[],docState: DocState | undefined) {
+    console.log("CellUpdateInfos " + label + ":")
+    cellUpdateInfos.forEach( cui => {
+        console.log(`lines: [${getCUIFromLine(cui)},${getCUIToLine(cui)}] pos: [${getCUIFrom(cui)},${getCUITo(cui)}] code: ${getCUICodeText(cui)}`)
+        cui.statementUpdateInfos.forEach(sui => {
+            printStatementUpdateInfo(sui,docState)
+        })
+    })
+}
+
+function printStatementUpdateInfo(sui: StatementUpdateInfo, docState: DocState | undefined) {
+    let si: StatementInfo | undefined
+    if(sui.action != StatementAction.create && docState !== undefined) {
+        si = findStatementInfo(docState,sui.id!)
+    }
+    let fromPos = sui.fromPos != undefined ? sui.fromPos : si !== undefined ? si.fromPos : "-"
+    let toPos = sui.toPos != undefined ? sui.toPos : si !== undefined ? si.toPos : "-"
+    let codeText = sui.docCode != undefined ? sui.docCode : si !== undefined ? si.docCode : "-"
+    console.log(`    field: ${codeText} range: [${fromPos},${toPos}]`)
+}
+
+
+///////////////////////////////////////////////////
 
 function mergeCellUpdateInfos(newCellUpdateInfos: CellUpdateInfo[], newCellsToDelete: CellInfo[], parseErrorInfo: ParseErrorInfo,
                             oldCellUpdateInfos: CellUpdateInfo[], oldCellsToDelete: CellInfo[], oldHasParseError: boolean,
@@ -308,46 +344,19 @@ function updateOldCells(editorState: EditorState, transaction: Transaction, docS
                 let newToLine = newToLineObject.number  
                 let newTo = newToLineObject.to
 
-                let codeText = docText.sliceString(newFrom,newTo).trim()
-
-                let updateInfo: CellUpdateInfo | undefined
-                if(codeText !== cellInfo.docCode) {
-                    //recalc statement offsets and update
-                    let statementUpdateInfos: StatementUpdateInfo[] = cellInfo.statementInfos.map(statementInfo => {
-                        let stmtFrom = changes.mapPos(cellInfo.from + statementInfo.fromOffset)
-                        let stmtTo = changes.mapPos(cellInfo.from + statementInfo.toOffset)
-                        return {
-                            action: StatementAction.update,
-                            id: statementInfo.id,
-                            docCode: docText.sliceString(stmtFrom,stmtTo).trim(),
-                            fromOffset: stmtFrom - newFrom,
-                            toOffset: stmtTo - newTo,
-                            savedCode: statementInfo.savedCode
-                        }
-                    })
-
-                    updateInfo = {action: Action.update, cellInfo, newFrom, newFromLine, newTo, newToLine, codeText, statementUpdateInfos}
-                }
-                else if(newFrom == cellInfo.from && newTo == cellInfo.to && newFromLine == cellInfo.fromLine && newToLine == cellInfo.toLine) {
-                    //reuse
-                    updateInfo = {action: Action.reuse, cellInfo, newFromLine, newToLine}
-                }
-                else {
-                    //remap
-                    updateInfo = {action: Action.remap, cellInfo, newFrom, newFromLine, newTo, newToLine}
-                }
-
-                //compare to previous update info!!!
+                //compare to previous update info for gap for overlap
+                //submit prev update info if needed
+                let prevStatementUpdateInfos: StatementUpdateInfo[] | undefined
                 if(prevUpdateInfo !== undefined) {
-                    if(updateInfo.newFromLine = prevUpdateInfo.newToLine + 1) {
+                    if(newFromLine == prevUpdateInfo.newToLine + 1) {
                         //no overlap or gap
                         cellUpdateInfos.push(prevUpdateInfo)
                     }
-                    else if(updateInfo.newFromLine > prevUpdateInfo.newToLine + 1) {
+                    else if(newFromLine > prevUpdateInfo.newToLine + 1) {
                         //add gap!
                         cellUpdateInfos.push(prevUpdateInfo)
                         let newFromLine = prevUpdateInfo.newToLine + 1
-                        let newToLine = updateInfo.newFromLine - 1
+                        let newToLine = newFromLine - 1
                         let newFrom = docText.line(newFromLine).from
                         let newTo = docText.line(newToLine).to
                         let gapUpdateInfo = {
@@ -365,20 +374,73 @@ function updateOldCells(editorState: EditorState, transaction: Transaction, docS
                         /////////////////////////////////////////////////////////////
                         //overlap - merge into one update info
                         //////////////////////////////////////////////////////////////
-                        if(updateInfo.newFromLine != prevUpdateInfo.newFromLine) {
-                            updateInfo.newFrom = prevUpdateInfo.newFrom
-                            updateInfo.newFromLine = prevUpdateInfo.newFromLine
-                            updateInfo.codeText = docText.sliceString(newFrom,newTo).trim()
+                        if(newFromLine != prevUpdateInfo.newFromLine) {
+                            newFromLine = getCUIFromLine(prevUpdateInfo)
+                            newFrom = getCUIFrom(prevUpdateInfo)
                         }
 
                         //copy on contents from previous to current
-
+                        if(prevUpdateInfo.cellInfo !== undefined) {
+                            prevStatementUpdateInfos = prevUpdateInfo.statementUpdateInfos
+                        }
 
                         //delete previous
                         if(prevUpdateInfo.cellInfo !== undefined && !cellInfoNeedsCreate(prevUpdateInfo.cellInfo)) {
                             cellsToDelete.push(prevUpdateInfo.cellInfo)
                         }
                     }
+                }
+
+                let codeText = docText.sliceString(newFrom,newTo).trim()
+
+                let updateInfo: CellUpdateInfo | undefined
+                if(codeText !== cellInfo.docCode) {
+                    //recalc statement and update
+                    let statementUpdateInfos: StatementUpdateInfo[] = cellInfo.statementInfos.map(statementInfo => {
+                        let stmtFrom = changes.mapPos(statementInfo.fromPos)
+                        let stmtTo = changes.mapPos(statementInfo.toPos)
+                        return {
+                            action: StatementAction.update,
+                            id: statementInfo.id,
+                            docCode: docText.sliceString(stmtFrom,stmtTo).trim(),
+                            fromPos: stmtFrom,
+                            toPos: stmtTo,
+                            isCode: statementInfo.isCode
+                        }
+                    })
+
+                    if(prevStatementUpdateInfos !== undefined) statementUpdateInfos = prevStatementUpdateInfos.concat(statementUpdateInfos)
+
+                    updateInfo = {action: Action.update, cellInfo, newFrom, newFromLine, newTo, newToLine, codeText, statementUpdateInfos}
+                }
+                else if(newFrom == cellInfo.from && newTo == cellInfo.to && newFromLine == cellInfo.fromLine && newToLine == cellInfo.toLine) {
+                    //reuse
+                    let statementUpdateInfos: StatementUpdateInfo[] = cellInfo.statementInfos.map(statementInfo => {
+                        return {
+                            action: StatementAction.reuse,
+                            id: statementInfo.id
+                        }
+                    })
+                    if(prevStatementUpdateInfos !== undefined) statementUpdateInfos = prevStatementUpdateInfos.concat(statementUpdateInfos)
+
+                    updateInfo = {action: Action.reuse, cellInfo, newFromLine, newToLine, statementUpdateInfos}
+                }
+                else {
+                    //remap
+                    let statementUpdateInfos: StatementUpdateInfo[] = cellInfo.statementInfos.map(statementInfo => {
+                        //on cell remap, the statements don't need to be remapped
+                        let stmtFrom = changes.mapPos(statementInfo.fromPos)
+                        let stmtTo = changes.mapPos(statementInfo.toPos)
+                        return {
+                            action: StatementAction.remap,
+                            id: statementInfo.id,
+                            fromPos: stmtFrom,
+                            toPos: stmtTo,
+                        }
+                    })
+                    if(prevStatementUpdateInfos !== undefined) statementUpdateInfos = prevStatementUpdateInfos.concat(statementUpdateInfos)
+
+                    updateInfo = {action: Action.remap, cellInfo, newFrom, newFromLine, newTo, newToLine, statementUpdateInfos}
                 }
 
                 //update prev
@@ -415,7 +477,13 @@ function updateOldCells(editorState: EditorState, transaction: Transaction, docS
                 action: Action.reuse, 
                 cellInfo,
                 newFromLine: cellInfo.fromLine,
-                newToLine: cellInfo.toLine
+                newToLine: cellInfo.toLine,
+                statementUpdateInfos: cellInfo.statementInfos.map(si => {
+                    return {
+                        action: StatementAction.reuse,
+                        id: si.id
+                    }
+                })
             } })) 
         }
     }
@@ -508,6 +576,8 @@ function parseNewCells(editorState: EditorState, docState: DocState | undefined,
                             let fromLine = startLine.number
                             let toLine = endLine.number
 
+                            let isCode = isNodeTypeCode(node.type.name)
+
                             if(fromLine > prevToLine + 1) {
 
                                 if(prevCellUpdateInfo !== undefined) {
@@ -532,8 +602,9 @@ function parseNewCells(editorState: EditorState, docState: DocState | undefined,
                             let statementUpdateInfo = {
                                 action: StatementAction.create,
                                 docCode: editorState.doc.sliceString(stmtFrom,stmtTo),
-                                fromOffset: stmtFrom - fromPos,
-                                toOffset: stmtTo - toPos,
+                                fromPos: stmtFrom,
+                                toPos: stmtTo,
+                                isCode: isCode
                             }
                             
                             if(fromLine <= prevToLine && prevCellUpdateInfo !== undefined && prevCellUpdateInfo.statementUpdateInfos !== undefined) { //prevCellUpdateInfo is supposed to exist if we need to merge
@@ -599,8 +670,29 @@ function parseNewCells(editorState: EditorState, docState: DocState | undefined,
         }
     })
 
-    //add the last cell
-    if(prevCellUpdateInfo !== undefined) newCellUpdateInfos.push(prevCellUpdateInfo)
+    //check for an end gap
+    let lastToLine = ONE_BEFORE_FIRST_LINE_NUMBER
+    if(prevCellUpdateInfo !== undefined) {
+        newCellUpdateInfos.push(prevCellUpdateInfo)
+        lastToLine = prevCellUpdateInfo.newToLine
+    }
+    if(lastToLine < docText.lines) {
+        //add end gap
+        let newFromLine = lastToLine + 1
+        let newToLine = docText.lines
+        let newFrom = docText.line(newFromLine).from
+        let newTo = docText.line(newToLine).to
+        let gapUpdateInfo = {
+            action: Action.create, 
+            newFrom,
+            newFromLine,
+            newTo,
+            newToLine,
+            codeText: docText.sliceString(newFrom,newTo).trim(),
+            statementUpdateInfos: []
+        }
+        newCellUpdateInfos.push(gapUpdateInfo)
+    }
 
     //get active edit info
     // let activeEditIndex = INVALID_CELL_INDEX
@@ -647,6 +739,10 @@ function parseNewCells(editorState: EditorState, docState: DocState | undefined,
         newActiveEditIndex: activeEditIndex,
         newActiveEditType: activeEditType
     }
+}
+
+function isNodeTypeCode(type: string) {
+    return type !== "LineComment" && type != "BlockComment"
 }
 
 type CellStructureData = {

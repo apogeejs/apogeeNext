@@ -30,3 +30,15 @@ export function createDocState(cellInfos: CellInfo[], docVersion: number,parseTr
     }
 }
 
+// DOH! implement this in a more efficient way. Maybe store a map of these objects in the doc stateS
+export function findStatementInfo(docState: DocState, statementInfoId: string) {
+    for(let cellIndex = 0; cellIndex < docState.cellInfos.length; cellIndex++) {
+        let cellInfo = docState.cellInfos[cellIndex]
+        for(let stmtIndex = 0; stmtIndex < cellInfo.statementInfos.length; stmtIndex++) {
+            let stmt = cellInfo.statementInfos[stmtIndex]
+            if(stmt.id == statementInfoId) return stmt
+        }
+    }
+    return undefined
+}
+

@@ -4,6 +4,7 @@ import type {Range, EditorState, ChangeSet, Text } from '@codemirror/state'
 import { ErrorInfoStruct, SessionOutputData } from "../../session/sessionApi"
 import { RValueStruct } from "../../session/sessionTypes"
 import OutputDisplay from "./OutputDisplay"
+import { DocState, findStatementInfo } from "./docState"
 
 const INVALID_VERSION_NUMBER = -1
 
@@ -24,6 +25,7 @@ export enum StatementAction {
     create,
     update,
     delete,
+    remap,
     reuse
 }
 
@@ -36,15 +38,16 @@ export type CellUpdateInfo = {
     newFromLine: number //we require this one
     newToLine: number //I ADDED REQUIRING THIS, just to make my implementation easier
     codeText?: string
-    statementUpdateInfos?: StatementUpdateInfo[]
+    statementUpdateInfos: StatementUpdateInfo[]
 }
 
 export type StatementUpdateInfo = {
     action: StatementAction,
     id?: string,
-    docCode: string,
-    fromOffset: number,
-    toOffset: number
+    docCode?: string,
+    fromPos?: number,
+    toPos?: number,
+    isCode?: boolean
 }
 
 interface CellInfoParams {
@@ -73,11 +76,10 @@ interface CellInfoParams {
 export type StatementInfo = {
     readonly id: string
 
-    readonly fromOffset: number
-    readonly toOffset: number
+    readonly fromPos: number
+    readonly toPos: number
     readonly docCode: string  //code in document
-    
-    readonly savedCode: string | null //saved code - passed to statement layer    
+    readonly isCode: boolean  
 }
 
 export class CellInfo {
@@ -256,51 +258,99 @@ export function getCellInfoByFrom(fromPos:number, cellInfos: CellInfo[]) {
 }
 
 /** This function creates a new cell */
-export function newCellInfo(editorState: EditorState,
+export function newCellInfo(editorState: EditorState, docState: DocState | undefined,
         from: number,to: number, fromLine: number, toLine:number,
         docCode: string, 
         statementUpdateInfos: StatementUpdateInfo[], // FOR NOW, ALL CREATE!!!
         docVersion: number) {
 
-    let statementInfos: StatementInfo[] = statementUpdateInfos.map( sui => {
-        if(sui.action != StatementAction.create) throw new Error("For now we only support create statement actions for create cell info!!!")
-        return {
-            id: getStatementId(),
-            fromOffset: sui.fromOffset,
-            toOffset: sui.toOffset,
-            docCode: sui.docCode,
-            savedCode: null
-        }
-    })
+    let statementInfos: StatementInfo[] = makeStatementInfos(statementUpdateInfos,docState)
 
     return new CellInfo(editorState,null,{from,to,fromLine,toLine,docCode,statementInfos,docVersion})
 }
 
 /** This function creates an updated cell for when the code changes. */
-export function  updateCellInfoCode(editorState: EditorState, cellInfo: CellInfo, 
+export function  updateCellInfoCode(editorState: EditorState, docState: DocState | undefined, cellInfo: CellInfo, 
         from: number, to:number, fromLine: number, toLine:number, 
         docCode: string, 
         statementUpdateInfos: StatementUpdateInfo[], //FOR NOW, ALL UPDATE AND ALIGNED WITH EXISTING!!!
         docVersion: number) {
 
-    let statementInfos: StatementInfo[] = statementUpdateInfos.map( (sui,index) => {
-        if(sui.action != StatementAction.update) throw new Error("For now we only support update statement actions for update cell info!!!")
-        let prevSi = cellInfo.statementInfos[index]  // we require alignment here for now!
-        return {
-            id: prevSi.id,
-            fromOffset: sui.fromOffset,
-            toOffset: sui.toOffset,
-            docCode: sui.docCode,
-            savedCode: prevSi.savedCode
+    let statementInfos: StatementInfo[] = makeStatementInfos(statementUpdateInfos,docState)
+    
+    return new CellInfo(editorState,cellInfo,{from,to,fromLine,toLine,docCode,statementInfos,docVersion})
+}
+
+function makeStatementInfos(statementUpdateInfos: StatementUpdateInfo[], docState: DocState | undefined) {
+    return statementUpdateInfos.map(sui => {
+        switch (sui.action) {
+            case StatementAction.create: {
+                return {
+                    id: getStatementId(),
+                    fromPos: sui.fromPos!,
+                    toPos: sui.toPos!,
+                    docCode: sui.docCode!,  
+                    isCode: sui.isCode!
+                }
+            }
+
+            case StatementAction.update: {
+                if(docState === undefined) throw new Error("Doc state missing when required!")
+                let prevSi = findStatementInfo(docState, sui.id!)
+                if(prevSi === undefined) throw new Error("Statement input to update not found!")
+                return {
+                    id: sui.id!,
+                    fromPos: sui.fromPos !== undefined ? sui.fromPos : prevSi.fromPos,
+                    toPos: sui.toPos !== undefined ? sui.toPos : prevSi.toPos,
+                    docCode: sui.docCode !== undefined ? sui.docCode : prevSi.docCode,
+                    isCode: prevSi.isCode
+                }
+
+            }
+
+            case StatementAction.remap: {
+                if(docState === undefined) throw new Error("Doc state missing when required!")
+                let prevSi = findStatementInfo(docState, sui.id!)
+                if(prevSi === undefined) throw new Error("Statement input to update not found!")
+                return {
+                    id: prevSi.id!,
+                    fromPos: sui.fromPos !== undefined ? sui.fromPos : prevSi.fromPos,
+                    toPos: sui.toPos !== undefined ? sui.toPos : prevSi.toPos,
+                    docCode: prevSi.docCode,
+                    isCode: prevSi.isCode
+                }
+            }
+
+            case StatementAction.reuse: {
+                if(docState === undefined) throw new Error("Doc state missing when required!")
+                let prevSi = findStatementInfo(docState, sui.id!)
+                if(prevSi === undefined) throw new Error("Statement input to update not found!")
+                return prevSi
+            }
+
+            default:
+                throw new Error("Unexpected statement update instruction type!")
         }
     })
-    
-    return new CellInfo(editorState,cellInfo,{from,to,fromLine,toLine,docCode,docVersion})
 }
 
 /** This function creates a remapped cell info for when only the position changes */
-export function  remapCellInfo(editorState: EditorState, cellInfo: CellInfo, from: number,to: number, fromLine: number, toLine:number) {
-    return new CellInfo(editorState,cellInfo,{from,to,fromLine,toLine})
+export function  remapCellInfo(editorState: EditorState, cellInfo: CellInfo, 
+        from: number,to: number, fromLine: number, toLine:number,
+        statementUpdateInfos: StatementUpdateInfo[]) {
+
+    let statementInfos: StatementInfo[] = statementUpdateInfos.map( (sui,index) => {
+        let prevSi = cellInfo.statementInfos[index]  // we require alignment here for now!
+        if(prevSi.id != sui.id) throw new Error("missalignment in statement info update!")
+        return {
+            id: sui.id,
+            fromPos: sui.fromPos!,
+            toPos: sui.toPos!,
+            docCode: prevSi.docCode,
+            isCode: prevSi.isCode
+        }
+    })
+    return new CellInfo(editorState,cellInfo,{from,to,fromLine,toLine,statementInfos})
 }
 
 /** This function creates an updated cell for status and or output (console or plot) changes. */
@@ -427,23 +477,23 @@ export  function getCUICodeText(cui: CellUpdateInfo) {
 }
 
 /** This function creates a CellInfo object from a CellUpdateInfo. */
-export function createCellInfos(editorState: EditorState, cellUpdateInfos: CellUpdateInfo[], docVersion:number) {
+export function createCellInfos(editorState: EditorState, docState: DocState | undefined, cellUpdateInfos: CellUpdateInfo[], docVersion:number) {
 
     return cellUpdateInfos.map( cui => {
         switch(cui.action) {
             case Action.create: 
                 //FOR NOW - STATEMENTS UPDATE INFO ARE ALL CREATE!!!
                 if(cui.statementUpdateInfos === undefined) throw new Error("we require statement update infos here for now!")
-                return newCellInfo(editorState,cui.newFrom!,cui.newTo!,cui.newFromLine,cui.newToLine!,cui.codeText!,cui.statementUpdateInfos!,docVersion) 
+                return newCellInfo(editorState,docState,cui.newFrom!,cui.newTo!,cui.newFromLine,cui.newToLine!,cui.codeText!,cui.statementUpdateInfos!,docVersion) 
 
             case Action.update: 
                 //FOR NOW - STATEMENTS UDPATE INFOS INCLUDES ALL STATEMENTS, IN ORDER!!!
                 if(cui.statementUpdateInfos === undefined) throw new Error("we require statement update infos here for now!")
-                return updateCellInfoCode(editorState,cui.cellInfo!,cui.newFrom!,cui.newTo!,cui.newFromLine,cui.newToLine!,cui.codeText!,cui.statementUpdateInfos!,docVersion) 
+                return updateCellInfoCode(editorState,docState,cui.cellInfo!,cui.newFrom!,cui.newTo!,cui.newFromLine,cui.newToLine!,cui.codeText!,cui.statementUpdateInfos!,docVersion) 
 
             case Action.remap: 
                 //NO CHANGE TO STATEMENT UPDATE INFOS
-                return remapCellInfo(editorState,cui.cellInfo!,cui.newFrom!,cui.newTo!,cui.newFromLine,cui.newToLine!)
+                return remapCellInfo(editorState,cui.cellInfo!,cui.newFrom!,cui.newTo!,cui.newFromLine,cui.newToLine!,cui.statementUpdateInfos)
 
             case Action.reuse: 
                 //NO CHANGE TO STATEMENT UPDATE INFOS
@@ -457,7 +507,7 @@ export function createCellInfos(editorState: EditorState, cellUpdateInfos: CellU
 
 
 export function cellHasCodeStatement(cellUpdateInfo: CellUpdateInfo) {
-    return true
+    return cellUpdateInfo.statementUpdateInfos.some(sui => sui.isCode)
 }
 
 
